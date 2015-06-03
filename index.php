@@ -364,7 +364,7 @@ HERE;
       <div class="row">
         <div class="col-md-6 col-md-offset-3">
           <h1 class="page-header text-center">What's that wiki running?</h1>
-        <form class="form-horizontal" role="form" method="post" action="">
+        <form id="wr" class="form-horizontal" role="form" method="post" action="">
           <div class="form-group">
             <label for="wikiUrl" class="col-sm-2 control-label">Wiki URL</label>
             <div class="col-sm-10">
@@ -457,13 +457,110 @@ HERE;
         </table>";      
     ?>
     <script>
-    /**
-      $(document).ready(function() {
-        $('#statistics-table').dynatable();
+$(document).ready(function() {
+  $.ajax({
+    url: "https://freephile.org/w/api.php",
+    // url: "http://en.banglapedia.org/api.php",
+    jsonp: "callback",
+    dataType: "jsonp",
+    data: {
+      action: "query",
+      meta: "siteinfo",
+      format: "json",
+      siprop: "general|extensions|statistics"
+      // siprop: "general|extensions|statistics"
+    },
+    success: function( data ) {
+      // console.log(Object.keys(data));
+      var text = '';
+      var myObj = data.query.general;
+      Object.getOwnPropertyNames(myObj).every(function(val, idx, array) {
+        if ( (myObj[val] == '') || (typeof myObj[val] == 'undefined') ) {
+          return false;
+        } else {
+          console.log( val + ' -> ' + myObj[val]);
+          text +=  '<li>' + val + ' -> ' + myObj[val] + "</li>\n";
+          return true;
+        }
       });
-      */
+      $( "#wikireport" ).html(text);
+      //alert(text);
+      delete myObj;
+      var text = '';
+      var myObj = data.query.extensions;
+      Object.getOwnPropertyNames(myObj).every(function(val, idx, array) {
+        if ( (myObj[val] == '') || (typeof myObj[val] == 'undefined') ) {
+          return false;
+        }/* else if (typeof myObj[val] == 'object') {
+          console.log( val + ' -> nested ');
+          text +=  '<li>' + val + ' -> nested ';
+          nestedObj = myObj[val];
+          Object.getOwnPropertyNames(nestedObj).every(function(val, idx, array) {
+            console.log( val + ' -> ' + nestedObj[val]);
+            text +=  val + ' -> ' + nestedObj[val] + "</li>\n";
+          });
+        } */ else {
+          console.log( val + ' -> ' + myObj[val]);
+          text +=  '<li>' + val + ' -> ' + myObj[val] + "</li>\n";
+          return true;
+        }
+      });
+      $( "#wikiextensions" ).html(text);
+      delete myObj;
+      var text = '';
+      var myObj = data.query.statistics;
+      // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/getOwnPropertyNames
+      Object.getOwnPropertyNames(myObj).forEach(function(val, idx, array) {
+        console.log( val + ' -> ' + myObj[val]);
+        text +=  '<li>' + val + ' -> ' + myObj[val] + "</li>\n";
+      });
+      $( "#wikistatistics" ).html(text);
+
+    }
+  })
+});    
+    
+/**
+      $(document).ready(function() {
+        var wikiUrl = $( "#wikiUrl" ).val();
+        var fullUrl = wikiUrl +  apiQuery;
+        $.ajax({
+          url: fullUrl
+        })
+        .done(function( data ) {
+          if ( console && console.log ) {
+            console.log( "Sample of data:" +  data);
+          }
+        });
+      });
+    
+    function makeQueryUrl (wikiUrl, apiQuery) {
+      if ( (wikiUrl == '') || (typeof wikiUrl == 'undefined') ) {
+        wikiUrl = $( "#wikiUrl" ).val();
+      }
+      if ( (apiQuery == '') || (typeof apiQuery == 'undefined') ) {
+        apiQuery = '/api.php?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
+      }
+      return wikiUrl + apiQuery;
+    }
+
+    $( "#wr" ).submit(function( event ) {
+        var apiQuery = '/api.php?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
+        var fullUrl = $( "#wikiUrl" ).val() + apiQuery;
+        $( "#wikireport" ).text( fullUrl ).show().fadeIn( 100 );
+        event.preventDefault();
+    });  
+ */
     </script>
-    <pre>
-    </pre>
+    <span>Report</span>
+    <ul id="wikireport">
+    </ul>
+    <span>Extensions</span>
+    <ul id="wikiextensions">
+    </ul>
+    <span>Statistics</span>
+    <ul id="wikistatistics">
+    </ul>
+
   </body>
 </html>
