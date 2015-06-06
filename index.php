@@ -1,14 +1,25 @@
 <?php
 
 /**
- * This file probably lives at https://freephile.org/mw.client/index.php
+ * This file probably lives at https://freephile.org/wikireport/index.php
  * 
  * Using the MediaWiki API, we want to query a wiki installation about the 
  * site's metadata that tells us the version, and the extensions running there.
  * 
  * We want to be able to retrieve this data, and then import it into our CiviCRM database
  * We also want to be able to create a nice public-facing reporting tool that we 
- * can use to do one-off reports, or to show to site owners.  
+ * can use to do one-off reports, or to show to site owners.
+ * 
+ * So we'll develop it in 3 phases:
+ * #1 The public-facing reporting tool will be developed first
+ * #2 The conduit to read and write data to the CiviCRM system
+ * #3 Publicize the reporting tool 
+ *      through campaigns to the people we have in the database
+ *      through social and other networks
+ *      possibly as a case study or info example on how to make APIs work for you and talk to each other.
+ * The goal of publicizing the reporting tool is to make it an inbound marketing tool
+ * If we can collect information about wikis that we don't know about, then we can market to those people.
+ * 
  * 
  * To create the UI, we'll use Bootstrap 
  * @see https://en.wikipedia.org/wiki/Bootstrap_%28front-end_framework%29
@@ -42,9 +53,17 @@
  * "timezone"
  * "time"
  * "favicon"
+ *
+ * I've found that there can be empty values; and which ones are empty depend on the instance, so we won't 
+ * hard-code what is in the report... we'll just report on what we find.  Likewise, we'll endeavor to collect all the info
+ * that is useful, but there will be information that is unavailable in some cases.
  
  After the general info, we are especially interested in 
- extensions
+ extensions.  Again, the info available for any given extension is going to vary, so we'll report on what's available,
+ and likewise we will record what we can find.
+ 
+ Do we timestamp in the CiviCRM database?  The "profile" will change over time, and so do we care about what it used to be?
+ 
 {
     "query": {
         "extensions": [
@@ -289,6 +308,21 @@ is useful as a documentation page that shows authors the additional tags usable 
 */
 
 
+/**
+  * a convenience function to remember if a checkbox was submitted.
+  */
+function isChecked($checkname, $checkvalue) {
+  if( !empty($_POST[$checkname])) {
+    foreach($_POST[$checkname] as $value) {
+      if ($checkvalue == $value) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+
 // whitelist myself so I don't have to answer the captcha
 $ipWhitelist = array('50.177.140.82');
 
@@ -315,21 +349,49 @@ if ($_POST["submit"]) {
   }
 
   // If there are no errors, do work and display
+  // This is still hard-coded, but eventually we may want to put in an interface that lets you look at other
+  // parts of the api
+  // finding the location of api.php
   if (!$errWikiUrl && !$errHuman) {
-    // $wikiUrl = 'freephile.org';
-    // $apiQuery = '/api.php?action=query&meta=siteinfo&format=json&siprop=general';
-    $apiQuery = '/api.php?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
-    $fullUrl = $wikiUrl . $apiQuery;
-    $data = file_get_contents($fullUrl);
+    $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
+    if ( substr($wikiUrl,-7) == 'api.php' ) {
+      $fullUrl = $wikiUrl . $apiQuery;
+      $data = file_get_contents($fullUrl);
+    } else {
+      // two requests to get the json
+      $data = file_get_contents($wikiUrl);
+      // a valid MediaWiki page will have a link like so
+      // <link rel="EditURI" type="application/rsd+xml" href="https://freephile.org/w/api.php?action=rsd" />
+      // if ( preg_match( '#<link rel="EditURI" type="application/rsd\+xml" href="(.*)\?action=rsd"#', $data, $matches) ) {
+      if ( preg_match( '#EditURI.* href\="(.*)\?action\=rsd"#U', $data, $matches) ) {
+        if ( $matches[1] !== $wikiUrl ) {
+          $wikiUrl = $matches[1];
+          $fullUrl = $wikiUrl . $apiQuery;
+          $data = file_get_contents($fullUrl);
+        }
+      } else {
+        // bad wikiUrl
+        $errWikiUrl = "Couln't find a wiki at that URL";
+      }
+    }
+    
+    
+    
 
+    define( "CURRENT_VERSION", '1.26wmf8');
+    define( "CURRENT_URL", 'https://en.wikipedia.org/w/');
+    define( "CURRENT_DATE", "2015/06/05");
 
     // https://php.net/manual/en/function.json-decode.php
-//     $data = json_decode($data);
-//     $version = $data->query->general->generator;
-//     $general = $data->query->general;
-//     $extensions = $data->query->extensions;
-//     $statistics = $data->query->statistics;
-    // with json_decode(), the second parameter can force output to an array instead of an object    
+    // With json_decode(), you either get an object, or using the optional second
+    // parameter, you can force the return value to an array.
+    // in the former case, you access the content using object notation
+    // in the latter case, you use array notation
+    // ie.    $data = json_decode($data);
+    //     $version = $data->query->general->generator;
+    // or     $data = json_decode($data, true);
+    // $version = $data['query']['general']['generator'];
+    
     $data = json_decode($data, true);
     $version = $data['query']['general']['generator'];
     $general = $data['query']['general'];
@@ -342,6 +404,8 @@ HERE;
   } else {
     $result='<div class="alert alert-danger">Sorry there was an error.</div>';
   }
+
+  
 }
 ?>
 
@@ -354,10 +418,10 @@ HERE;
     <meta name="description" content="What's that wiki running?">
     <meta name="author" content="eQuality-Tech.com">
     <title>Wiki Report</title>
+    <link rel="shortcut icon" href="//freephile.org/wikireport/favicon.ico" type="image/png">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/css/bootstrap.min.css">
     <!-- integrate Google reCaptcha -->
     <script src='https://www.google.com/recaptcha/api.js'></script>
-    <link rel="stylesheet" href="jquery.dynatable.css">
   </head>
   <body>
     <div class="container">
@@ -368,8 +432,25 @@ HERE;
           <div class="form-group">
             <label for="wikiUrl" class="col-sm-2 control-label">Wiki URL</label>
             <div class="col-sm-10">
-              <input type="text" class="form-control" id="wikiUrl" name="wikiUrl" placeholder="https://example.com" value="<?php echo $wikiUrl; ?>">
+              <input type="url" class="form-control" id="wikiUrl" name="wikiUrl" placeholder="https://example.com" value="<?php echo $wikiUrl; ?>">
               <?php echo "<p class='text-danger'>$errWikiUrl</p>";?>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label">Show Me</label>
+            <div class="col-sm-10 col-sm-offset-2"> 
+              <label class="checkbox checkbox-success" for="general">
+                <input type="checkbox" value="general" id="general" name="options[]" <?php echo (isChecked("options", "general"))? 'checked="checked"' : '' ?>/>
+                General Info
+              </label>
+              <label class="checkbox checkbox-success" for="extensions">
+                <input type="checkbox" value="extensions" id="extensions" name="options[]" <?php echo (isChecked("options", "extensions"))? 'checked="checked"' : '' ?>/>
+                Extensions
+              </label>
+              <label class="checkbox checkbox-success" for="statistics">
+                <input type="checkbox" value="statistics" id="statistics" name="options[]" <?php echo (isChecked("options", "statistics"))? 'checked="checked"' : '' ?>/>
+                Statistics
+              </label>
             </div>
           </div>
           <div class="form-group">
@@ -393,52 +474,98 @@ HERE;
         </form> 
       </div>
     </div>
-    
-      <!-- div class="row">
-        <table id="general-table" class="table table-striped table-condensed table-bordered table-hover" width="100%">
-          <thead>
-            <th>Foo</th>
-            <th>Bar</th>
-            <th>Version</th>
-          </thead>
-          <tbody>
-            <tr><td></td><td></td><td></td></tr>
-            <tr><td></td><td></td><td><?php echo $version; ?></td></tr>
-          </tbody>
-        </table>
-      </div -->
-
 
       
     </div>
+    <div id="footer">
+      <div class="container">
+        <p class="muted credit">courtesy <a href="https://eQuality-Tech.com">eQuality Technology</a> and <a href="https://linkedin.com/in/freephile/">Greg Rundlett</a></p>
+      </div>
+    </div>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+    <script src="https://freephile.org/wikireport/vendor/jquery-number/jquery.number.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
-    <script src="jquery.dynatable.js"></script>
-    <?php 
-      //$general
-      //$extensions
-      // var_dump ($statistics);
-      function objectToArray ($object) {
-        if(!is_object($object) && !is_array($object))
-            return $object;
+<?php
+  if ($_POST['submit']) {
+    function objectToArray ($object) {
+      if(!is_object($object) && !is_array($object))
+          return $object;
 
-        return array_map('objectToArray', (array) $object);
+      return array_map('objectToArray', (array) $object);
+    }
+    // use get_object_vars()
+    //$tabledata = get_object_vars($statistics);
+    // use casting
+    // $tabledata = (array) $general;
+
+    $options = $_REQUEST['options'];
+    
+    if( in_array('general', $options) || count($options)==0) {
+      $tabledata = (array) $general;
+      echo <<<HERE
+      <div class="col-md-6 col-md-offset-3">
+      <h2>General Info</h2>
+      <div class="table-responsive">
+        <table id="wiki-general-table" class="table table-striped table-condensed table-bordered table-hover">
+          <thead>
+          <tr><th>Item</th><th>Value</th></tr>
+          </thead>
+          <tbody>
+HERE;
+      foreach ( $tabledata as $k => $v ) {
+        if ( strlen($v) ) {
+          if ( parse_url($v, PHP_URL_SCHEME)  ) {
+            $v = "<a href=\"$v\">$v</a>";
+          }
+          echo "<tr><th>$k</th><td>$v</td></tr>";
+        }
       }
-      // use get_object_vars()
-      //$tabledata = get_object_vars($statistics);
-      // use casting
-      // $tabledata = (array) $general;
+      echo "</tbody>
+        </table>
+      </div>
+      </div>";
+    }
+    if( in_array('extensions', $options) ) {
+      $tabledata = (array) $extensions;
+      $extensions_count = count($tabledata);
+      echo <<<HERE
+      <div class="col-md-6 col-md-offset-3">
+      <h2>Extensions</h2>
+HERE;
+      foreach ($tabledata as $k => $v) {
+        echo <<<HERE
+        <div class="table-responsive">
+          <table id="wiki-extensions-table-$k" class="table table-striped table-condensed table-bordered table-hover">
+            <thead>
+            <tr><th colspan="2" class="text-center">{$v["name"]}</th></tr>
+            </thead>
+            <tbody>
+HERE;
+        foreach ($v as $key => $value) {
+          if ( (strlen($value)) && ($key != 'name') ) {
+            // if value starts with http or is a protocol-relative URL, then linkify it
+            if ( parse_url($value, PHP_URL_SCHEME)  ) {
+              $value = "<a href=\"$value\">$value</a>";
+            }
+            echo "<tr><th>$key</th><td>$value</td></tr>";
+          }
+        }
+      echo "</tbody>
+        </table>
+      </div>";          
+      }
+      echo "
+      </div>";
+    }
+    if( in_array('statistics', $options) ) {
       $tabledata = (array) $statistics;
-
-      
-      // echo '<pre>';
-      // var_dump ($tabledata);
-      // echo '</pre>';
       $headings = array_keys($tabledata);
       $len = count($tabledata);
       $values = array_values($tabledata);
       echo <<<HERE
-        <table id="statistics-table" class="table table-striped table-condensed table-bordered table-hover" width="100%">
+      <h2>Statistics</h2>
+      <div class="table-responsive">
+        <table id="wiki-statistics-table" class="table table-striped table-condensed table-bordered table-hover">
           <thead>
           <tr>
 HERE;
@@ -450,13 +577,21 @@ HERE;
         <tbody>";
       echo "\n<tr>";
         for ($i=0; $i< $len; $i++) {
-          echo "<td>$values[$i]</td>";
+          echo "<td class=\"number\">$values[$i]</td>";
         }
       echo "</tr>";
       echo "</tbody>
-        </table>";      
-    ?>
+        </table>
+      </div>";
+    }
+  }// end if $POST
+?>
     <script>
+    // format any class="number" element
+    // we're using a jQuery plugin, but could use regular JavaScript
+    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/NumberFormat/format
+    $(".number").number( true, 0 );
+    /*
 $(document).ready(function() {
   $.ajax({
     url: "https://freephile.org/w/api.php",
@@ -483,7 +618,7 @@ $(document).ready(function() {
           return true;
         }
       });
-      $( "#wikireport" ).html(text);
+      $( "#wikigeneral" ).html(text);
       //alert(text);
       delete myObj;
       var text = '';
@@ -491,7 +626,7 @@ $(document).ready(function() {
       Object.getOwnPropertyNames(myObj).every(function(val, idx, array) {
         if ( (myObj[val] == '') || (typeof myObj[val] == 'undefined') ) {
           return false;
-        }/* else if (typeof myObj[val] == 'object') {
+        } else if (typeof myObj[val] == 'object') {
           console.log( val + ' -> nested ');
           text +=  '<li>' + val + ' -> nested ';
           nestedObj = myObj[val];
@@ -499,7 +634,7 @@ $(document).ready(function() {
             console.log( val + ' -> ' + nestedObj[val]);
             text +=  val + ' -> ' + nestedObj[val] + "</li>\n";
           });
-        } */ else {
+        } else {
           console.log( val + ' -> ' + myObj[val]);
           text +=  '<li>' + val + ' -> ' + myObj[val] + "</li>\n";
           return true;
@@ -547,20 +682,11 @@ $(document).ready(function() {
     $( "#wr" ).submit(function( event ) {
         var apiQuery = '/api.php?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
         var fullUrl = $( "#wikiUrl" ).val() + apiQuery;
-        $( "#wikireport" ).text( fullUrl ).show().fadeIn( 100 );
+        $( "#wikigeneral" ).text( fullUrl ).show().fadeIn( 100 );
         event.preventDefault();
     });  
  */
     </script>
-    <span>Report</span>
-    <ul id="wikireport">
-    </ul>
-    <span>Extensions</span>
-    <ul id="wikiextensions">
-    </ul>
-    <span>Statistics</span>
-    <ul id="wikistatistics">
-    </ul>
 
   </body>
 </html>
