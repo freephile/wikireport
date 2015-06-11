@@ -355,7 +355,8 @@ if ($_POST["submit"]) {
   if (!$errWikiUrl && !$errHuman) {
     $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
     if ( substr($wikiUrl,-7) == 'api.php' ) {
-      $fullUrl = $wikiUrl . $apiQuery;
+      $apiUrl = $wikiUrl;
+      $fullUrl = $apiUrl . $apiQuery;
       $data = file_get_contents($fullUrl);
     } else {
       // two requests to get the json
@@ -364,11 +365,14 @@ if ($_POST["submit"]) {
       // <link rel="EditURI" type="application/rsd+xml" href="https://freephile.org/w/api.php?action=rsd" />
       // if ( preg_match( '#<link rel="EditURI" type="application/rsd\+xml" href="(.*)\?action=rsd"#', $data, $matches) ) {
       if ( preg_match( '#EditURI.* href\="(.*)\?action\=rsd"#U', $data, $matches) ) {
-        if ( $matches[1] !== $wikiUrl ) {
-          $wikiUrl = $matches[1];
-          $fullUrl = $wikiUrl . $apiQuery;
-          $data = file_get_contents($fullUrl);
-        }
+        $apiUrl = $matches[1];
+        $fullUrl = $apiUrl . $apiQuery;
+        $data = file_get_contents($fullUrl);
+        // we can just record whatever URL is given as the wiki URL.  We don't have to canonicalize it
+        // We could record the apiUrl in our database as the canonical reference to identify a wiki.
+        // OR, even better, the 'base' attribute in the 'general' property shows the "Main Page" URL
+        // There is <link rel="alternate" hreflang="x-default" href="/wiki/Music" /> that we could use
+        // to canonicalize the wikiUrl from the client, but I don't see the point.
       } else {
         // bad wikiUrl
         $errWikiUrl = "Couln't find a wiki at that URL";
