@@ -381,11 +381,15 @@ if ($_POST["submit"]) {
     
     
     
-
+    // define constants for comparison
     define( "CURRENT_VERSION", '1.26wmf8');
-    define( "CURRENT_URL", 'https://en.wikipedia.org/w/');
+    define( "CURRENT_URL", 'https://en.wikipedia.org/');
     define( "CURRENT_DATE", "2015/06/05");
-
+    // assign them to variables for easier output
+    $current_version = CURRENT_VERSION;
+    $current_url = CURRENT_URL;
+    $current_date = CURRENT_DATE;
+    
     // https://php.net/manual/en/function.json-decode.php
     // With json_decode(), you either get an object, or using the optional second
     // parameter, you can force the return value to an array.
@@ -401,9 +405,14 @@ if ($_POST["submit"]) {
     $general = $data['query']['general'];
     $extensions = $data['query']['extensions'];
     $statistics = $data['query']['statistics'];
+    
+    $canonicalWikiUrl = $general['base'];
+    
 
     $result =  <<<HERE
-      <div class="alert alert-success">You're running $version at $wikiUrl</div>
+      <div class="alert alert-success">You're running $version at $wikiUrl<br />
+      This is compared to $current_version which was found running at $current_url as of $current_date
+      </div>
 HERE;
   } else {
     $result='<div class="alert alert-danger">Sorry there was an error.</div>';
