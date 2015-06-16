@@ -324,11 +324,15 @@ function isChecked($checkname, $checkvalue) {
 
 
 // whitelist myself so I don't have to answer the captcha
-$ipWhitelist = array('50.177.140.82');
+$ipWhitelist = array('50.177.140.82', '127.0.0.1');
+// echo $_SERVER['REMOTE_ADDR'];
 
 $wikiUrl = isset($_GET["wikiUrl"])? htmlspecialchars($_GET["wikiUrl"]) : '';
 
-if ($_POST["submit"]) {
+if ( isset($_POST["submit"]) ) {
+  // composer libraries
+  require __DIR__ . '/vendor/autoload.php';
+  
   $wikiUrl = htmlspecialchars($_POST['wikiUrl']);
   // Check if wikiUrl has been entered
   if (!$wikiUrl) {
@@ -344,7 +348,7 @@ if ($_POST["submit"]) {
     if ($resp->isSuccess()) {
         // verified! $human 
     } else {
-        $errHuman = $resp->getErrorCodes();
+        $errHuman = (string)$resp->getErrorCodes();
     }    
   }
 
@@ -352,7 +356,7 @@ if ($_POST["submit"]) {
   // This is still hard-coded, but eventually we may want to put in an interface that lets you look at other
   // parts of the api
   // finding the location of api.php
-  if (!$errWikiUrl && !$errHuman) {
+  if ( !isset($errWikiUrl) && !isset($errHuman) ) {
     $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
     if ( substr($wikiUrl,-7) == 'api.php' ) {
       $apiUrl = $wikiUrl;
@@ -446,7 +450,7 @@ HERE;
             <label for="wikiUrl" class="col-sm-2 control-label">Wiki URL</label>
             <div class="col-sm-10">
               <input type="url" class="form-control" id="wikiUrl" name="wikiUrl" placeholder="https://example.com" value="<?php echo $wikiUrl; ?>">
-              <?php echo "<p class='text-danger'>$errWikiUrl</p>";?>
+              <?php if ( isset($errWikiUrl) ) { echo "<p class='text-danger'>$errWikiUrl</p>"; } ?>
             </div>
           </div>
           <div class="form-group">
@@ -454,7 +458,7 @@ HERE;
             <div class="col-sm-10 col-sm-offset-2"> 
               <label class="checkbox checkbox-success" for="general">
                 <input type="checkbox" value="general" id="general" name="options[]" <?php echo (isChecked("options", "general"))? 'checked="checked"' : '' ?>/>
-                General Info
+                Wiki Report
               </label>
               <label class="checkbox checkbox-success" for="extensions">
                 <input type="checkbox" value="extensions" id="extensions" name="options[]" <?php echo (isChecked("options", "extensions"))? 'checked="checked"' : '' ?>/>
@@ -471,7 +475,7 @@ HERE;
             <div class="col-sm-10">
               <div class="g-recaptcha" data-sitekey="6LdJSAcTAAAAAPO59C3kELL-VNMTmEleZbyNqGZI"></div>
               <input type="hidden" class="form-control" id="human" name="human" placeholder="Not a bot">
-            <?php echo "<p class='text-danger'>$errHuman</p>";?>
+            <?php if ( isset($errHuman) ) { echo "<p class='text-danger'>$errHuman</p>"; } ?>
             </div>
           </div>
           <div class="form-group">
@@ -481,7 +485,7 @@ HERE;
           </div>
           <div class="form-group">
             <div class="col-sm-10 col-sm-offset-2">
-              <?php echo $result; ?>  
+              <?php if ( isset($result) ) { echo $result; } ?>  
             </div>
           </div>
         </form> 
@@ -499,12 +503,27 @@ HERE;
     <script src="https://freephile.org/wikireport/vendor/jquery-number/jquery.number.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
 <?php
-  if ($_POST['submit']) {
+  if ( isset($_POST['submit']) ) {
     function objectToArray ($object) {
       if(!is_object($object) && !is_array($object))
           return $object;
 
       return array_map('objectToArray', (array) $object);
+    }
+    
+    /**
+     * operate on a value to create a hyperlink
+     * if the value is a scalar URL
+     * @return boolean TRUE if linkified
+     */
+    function linkify (&$v) {
+      if ( is_string($v) && strlen($v) ) {
+        if ( parse_url($v, PHP_URL_SCHEME)  ) {
+          $v = "<a href=\"$v\">$v</a>";
+        }
+        return true;
+      }
+      return false;
     }
     // use get_object_vars()
     //$tabledata = get_object_vars($statistics);
@@ -517,7 +536,7 @@ HERE;
       $tabledata = (array) $general;
       echo <<<HERE
       <div class="col-md-6 col-md-offset-3">
-      <h2>General Info</h2>
+      <h2>Wiki Report</h2>
       <div class="table-responsive">
         <table id="wiki-general-table" class="table table-striped table-condensed table-bordered table-hover">
           <thead>
@@ -526,12 +545,8 @@ HERE;
           <tbody>
 HERE;
       foreach ( $tabledata as $k => $v ) {
-        if ( strlen($v) ) {
-          if ( parse_url($v, PHP_URL_SCHEME)  ) {
-            $v = "<a href=\"$v\">$v</a>";
-          }
-          echo "<tr><th>$k</th><td>$v</td></tr>";
-        }
+        linkify($v);
+        echo "<tr><th>$k</th><td>$v</td></tr>";
       }
       echo "</tbody>
         </table>
@@ -557,9 +572,7 @@ HERE;
         foreach ($v as $key => $value) {
           if ( (strlen($value)) && ($key != 'name') ) {
             // if value starts with http or is a protocol-relative URL, then linkify it
-            if ( parse_url($value, PHP_URL_SCHEME)  ) {
-              $value = "<a href=\"$value\">$value</a>";
-            }
+            linkify($value);
             echo "<tr><th>$key</th><td>$value</td></tr>";
           }
         }
