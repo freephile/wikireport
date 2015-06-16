@@ -342,7 +342,7 @@ if ( isset($_POST["submit"]) ) {
   }
   // do reCaptcha verification for anyone not from hq
   if (!in_array($_SERVER['REMOTE_ADDR'], $ipWhitelist)) {
-    $secret = '6LdJSAcTAAAAAP4wnhKFs4bmE6NgXZYsxk-R1max';
+    require_once( __DIR__ . "secret.php" );
     $recaptcha = new \ReCaptcha\ReCaptcha($secret);
     $resp = $recaptcha->verify($_POST['g-recaptcha-response'], $_SERVER['REMOTE_ADDR']);
     if ($resp->isSuccess()) {
@@ -473,7 +473,7 @@ HERE;
           <div class="form-group">
             <label for="human" class="col-sm-2 control-label">Are you a robot?</label>
             <div class="col-sm-10">
-              <div class="g-recaptcha" data-sitekey="6LdJSAcTAAAAAPO59C3kELL-VNMTmEleZbyNqGZI"></div>
+              <div class="g-recaptcha" data-sitekey="6LcjPwgTAAAAACwnvsybTIDSyvsNs0EkbxFkb-qw"></div>
               <input type="hidden" class="form-control" id="human" name="human" placeholder="Not a bot">
             <?php if ( isset($errHuman) ) { echo "<p class='text-danger'>$errHuman</p>"; } ?>
             </div>
