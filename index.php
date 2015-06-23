@@ -66,7 +66,9 @@ function linkify (&$v) {
 $ipWhitelist = array('50.177.140.82', '127.0.0.1');
 // echo $_SERVER['REMOTE_ADDR'];
 
-$wikiUrl = isset($_GET["wikiUrl"])? htmlspecialchars($_GET["wikiUrl"]) : '';
+// $wikiUrl = isset($_GET["wikiUrl"])? htmlspecialchars($_GET["wikiUrl"]) : '';
+// will not work with non-ascii domains, but we're only in the U.S.
+$wikiUrl = filter_input(INPUT_GET, 'wikiUrl', FILTER_VALIDATE_URL);
 
 if ( isset($_POST["submit"]) ) {
   // composer libraries
@@ -118,7 +120,7 @@ if ( isset($_POST["submit"]) ) {
         // to canonicalize the wikiUrl from the client, but I don't see the point.
       } else {
         // bad wikiUrl
-        $errWikiUrl = "Couln't find a wiki at that URL";
+        $errWikiUrl = "No wiki found at that URL";
       }
     }
     
@@ -150,13 +152,27 @@ if ( isset($_POST["submit"]) ) {
     $statistics = $data['query']['statistics'];
     
     $canonicalWikiUrl = $general['base'];
+    if (empty($canonicalWikiUrl)) {
+      $errWikiPerm = "No Soup for YOU!";
+    }
     
-
-    $result =  <<<HERE
-      <div class="alert alert-success">You're running $version at $wikiUrl<br />
-      This is compared to $current_version which was found running at $current_url as of $current_date
-      </div>
+    if ( isset($errWikiUrl) ) {
+      $result =  <<<HERE
+        <div class="alert alert-danger">We could not detect a wiki at $wikiUrl
+        </div>
 HERE;
+    } else if ( isset($errWikiPerm) ) {
+      $result =  <<<HERE
+        <div class="alert alert-danger">Wiki detected at $wikiUrl, but we can't report on it.
+        </div>
+HERE;
+    } else {
+      $result =  <<<HERE
+        <div class="alert alert-success">You're running $version at $wikiUrl<br />
+        This is compared to $current_version which was found running at $current_url as of $current_date
+        </div>
+HERE;
+    }
   } else {
     $result='<div class="alert alert-danger">Sorry there was an error.</div>';
   }
@@ -190,6 +206,7 @@ HERE;
             <div class="col-sm-10">
               <input type="url" class="form-control" id="wikiUrl" name="wikiUrl" placeholder="https://example.com" value="<?php echo $wikiUrl; ?>">
               <?php if ( isset($errWikiUrl) ) { echo "<p class='text-danger'>$errWikiUrl</p>"; } ?>
+              <?php if ( isset($errWikiPerm) ) { echo "<p class='text-danger'>$errWikiPerm</p>"; } ?>
             </div>
           </div>
           <div class="form-group">
