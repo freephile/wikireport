@@ -1,137 +1,301 @@
 <?php
 
-
 class UrlFixer {
 
-  public $url;
-
-
-}
-
-
-function html_linkify (&$v) {
-  if ( is_string($v) && strlen($v) ) {
-    if ( parse_url($v, PHP_URL_SCHEME)  ) {
-      $v = "<a href=\"$v\">$v</a>";
+    public $orginalUrl;
+    
+    public $url;
+    
+    public $msg;
+    
+    public $parsedUrl;
+    
+    function __construct($url) {
+        $this->msg = array();
+        $this->orginalUrl = $this->url = $url;
+        $this->sanitize_url();
+        $this->parsedUrl = parse_url($this->url);
     }
-    return true;
-  }
-  return false;
+    
+    function __toString() {
+        echo nl2br(implode(PHP_EOL , $this->msg));
+    }
+
+    function unparse_url() {
+        $scheme= isset($this->parsed_url['scheme']) ? $this->parsed_url['scheme'] . '://' : '';
+        $host  = isset($this->parsed_url['host'])   ? $this->parsed_url['host'] : '';
+        $port  = isset($this->parsed_url['port'])   ? ':' . $this->parsed_url['port'] : '';
+        $user  = isset($this->parsed_url['user'])   ? $this->parsed_url['user'] . ':' : '';
+        $pass  = isset($this->parsed_url['pass'])   ? $this->parsed_url['pass'] : '';
+        $pass  = ($user || $pass) ? "$pass@" : ''; // not sure if you can have just user, but if so, then this will still append '@'
+        $path  = isset($this->parsed_url['path'])   ? $this->parsed_url['path'] : '';
+        $query = isset($this->parsed_url['query'])  ? '?' . $this->parsed_url['query'] : '';
+        $frag  = isset($this->parsed_url['fragment']) ? '#' . $this->parsed_url['fragment'] : '';
+        return "$scheme$user$pass$host$port$path$query$frag";
+    }
+
+    function html_linkify() {
+        $v = $this->url;
+        if (is_string($v) && strlen($v)) {
+            if (parse_url($v, PHP_URL_SCHEME)) {
+                $this->msg[] = "$v turned into a link";
+                $v = "<a href=\"$v\">$v</a>";
+                $this->url = $v;
+            }
+            
+            return true;
+        }
+        $this->msg[] = "$v not linked";
+        return false;
+    }
+
+    function prefix_scheme($scheme = 'http://') {
+        if ( substr($this->url, 0, strlen($scheme)) == $scheme ) {
+            $this->msg[] = "$this->url already begins with $scheme";
+            return;
+        }
+        if ( substr($this->url, 0, 2) == '//' ) {
+            $this->mgs[] = "$this->url used protocol relative '//', now using full $scheme";
+            $this->url = $scheme . substr($this->url, 2);
+        }
+        
+        $this->msg[] = "$this->url prefixed with $scheme";
+        $this->url = $scheme . $this->url;
+        return true;
+    }
+    
+    function find_redirect() {
+        $headers = get_headers($this->url, 1);
+        if (!stristr($headers[0], '200')) {
+            if ( isset($headers['Location']) && !empty($headers['Location']) ) {
+                // pickup the new target
+                $this->url = is_array($headers['Location'])? array_pop($headers['Location']) : $headers['Location'];
+                // for 302 (found) relative redirects, add back the host
+                if ( substr($this->url, 0, 1) == '/' ) {
+                    $this->url = $this->parsedUrl['scheme'] . '://' . 
+                                 $this->parsedUrl['host'] . 
+                                 $this->url;
+                }
+                //$this->msg[] = print_r($headers, 1);
+                $this->msg[] = $this->orginalUrl  . " redirected to " . $this->url;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    //$v = "http://freephile.org";
+
+    //$v = find_redirect($v);
+    //echo $v;
+
+    // could use https://php.net/manual/en/function.filter-input-array.php to setup sanitization for the whole form
+    // if there are multiple inputs, but we only need to deal with email and URL
+    // will not work with non-ascii domains, but we're only in the U.S.
+    // $wikiUrl = filter_input(INPUT_GET, 'wikiUrl', FILTER_VALIDATE_URL);
+    function sanitize_url() {
+        if ( filter_var($this->url, FILTER_SANITIZE_URL) ) { // clean
+            $this->msg[] = $this->url . " was sanitized";
+            return true;
+        } else {
+            $this->msg[] = $this->url . " did not need to be sanitized";
+            return false;
+        }
+    }
+    function validate_url() {
+        if ( filter_var($this->url, FILTER_VALIDATE_URL) ) { // valid
+            $this->msg[] = $this->url . " is valid";
+            $this->parsedUrl = parse_url($this->url);
+        } else {
+            return false;
+        }
+    }
+    
+    // renamed from is_valid_url()
+    function url_resolves($url = "") {
+        if ($url == "") {
+            $url=$this->url;
+        }
+        $url = @parse_url($url);
+        if (!$url) {
+            return false;
+        }
+        $url = array_map('trim', $url);
+        $url['port'] = (!isset($url['port'])) ? 80 : (int) $url['port'];
+        $path = (isset($url['path'])) ? $url['path'] : '';
+
+        if ($path == '') {
+            $path = '/';
+        }
+        $path .= ( isset($url['query']) ) ? "?$url[query]" : '';
+        if (isset($url['host']) AND $url['host'] != gethostbyname($url['host'])) {
+            if (PHP_VERSION >= 5) {
+                $headers = get_headers("$url[scheme]://$url[host]:$url[port]$path");
+            } else {
+                $fp = fsockopen($url['host'], $url['port'], $errno, $errstr, 30);
+                if (!$fp) {
+                    return false;
+                }
+                fputs($fp, "HEAD $path HTTP/1.1\r\nHost: $url[host]\r\n\r\n");
+                $headers = fread($fp, 128);
+                fclose($fp);
+            }
+            $headers = ( is_array($headers) ) ? implode("\n", $headers) : $headers;
+            return (bool) preg_match('#^HTTP/.*\s+[(200|301|302)]+\s#i', $headers);
+        }
+        return false;
+    }
+} // end class
+
+class civiFixer {
+    function fix_note($v) {
+        $a = explode(';', $v); // if it's semi-colon separated, make an array
+        foreach ($a as $key => $value) {
+            $a[$key] = prefix_sheme($value);
+            if (!sanitize_url($a[$key])) {
+                die('url not valid' . $a[$key]);
+            }
+
+
+
+            //find_redirect($a[$key]);
+        }
+        $v = implode(';', (array) $a); // implode on a string returns null!
+    }
 }
 
-function prefix_scheme (&$v, $scheme='http://') {
+// end classes
+// ----------------------------------------------------------------------------
+// begin functions
+    
+    
+function html_linkify(&$v) {
+    if (is_string($v) && strlen($v)) {
+        if (parse_url($v, PHP_URL_SCHEME)) {
+            $v = "<a href=\"$v\">$v</a>";
+        }
+        return true;
+    }
+    return false;
+}
+
+function prefix_scheme(&$v, $scheme = 'http://') {
     $v = "$scheme$v";
 }
 
+function fix_note(&$v) {
+    $a = explode(';', $v); // if it's semi-colon separated, make an array
+    foreach ($a as $key => $value) {
+        $a[$key] = prefix_sheme($value);
+        if (!sanitize_url($a[$key])) {
+            die('url not valid' . $a[$key]);
+        }
 
-function fix_note (&$v) {
-  $a = explode(';', $v); // if it's semi-colon separated, make an array
-  foreach ($a as $key => $value) {
-    $a[$key] = prefix_sheme($value);
-    if (! sanitize_url($a[$key]) ) {
-      die ('url not valid' . $a[$key]);
+
+
+        //find_redirect($a[$key]);
     }
-    
-
-    
-    //find_redirect($a[$key]);
-  }
-  $v = implode(';', (array) $a); // implode on a string returns null!
+    $v = implode(';', (array) $a); // implode on a string returns null!
 }
-
 
 /*
-record 0 (2315)
-http://wiki.mozilla.org for 3908
-record 1 (2316)
-http://ballotpedia.org for 3909
-record 2 (2317)
-http://wikihow.com for 3910
-record 3 (2318)
-http://wikicafe.metacafe.com for 3911
-record 4 (2319)
-http://wiki.algebra.com for 3912
-record 5 (2320)
-http://familysearch.org for 3913
-record 6 (2321)
-http://wowwiki.com for 3914
-record 7 (2322)
-http://help.pingg.com for 3915
-record 8 (2323)
-http://help.usajobs.gov for 3916
-record 9 (2324)
-http://baseball-reference.com for 3917
-*/
+  record 0 (2315)
+  http://wiki.mozilla.org for 3908
+  record 1 (2316)
+  http://ballotpedia.org for 3909
+  record 2 (2317)
+  http://wikihow.com for 3910
+  record 3 (2318)
+  http://wikicafe.metacafe.com for 3911
+  record 4 (2319)
+  http://wiki.algebra.com for 3912
+  record 5 (2320)
+  http://familysearch.org for 3913
+  record 6 (2321)
+  http://wowwiki.com for 3914
+  record 7 (2322)
+  http://help.pingg.com for 3915
+  record 8 (2323)
+  http://help.usajobs.gov for 3916
+  record 9 (2324)
+  http://baseball-reference.com for 3917
+ */
 
-
-
-function find_redirect (&$v) {
-  $headers = get_headers($v, 1);
-  if ( ! stristr($headers[0], '200') ) {
-    if ( isset($headers['Location']) ) {
-      // pickup the new target
-      $v = array_pop($headers['Location']);
-      $msg = "NEW $v";
-      return $msg;
+function find_redirect(&$v) {
+    $headers = get_headers($v, 1);
+    if (!stristr($headers[0], '200')) {
+        if (isset($headers['Location'])) {
+            // pickup the new target
+            $v = array_pop($headers['Location']);
+            $msg = "NEW $v";
+            return $msg;
+        }
     }
-  }
-
 }
 
-$v = "http://freephile.org";
+// functional client code
+// -----------------------------------------------------------------------------
+// $v = "http://freephile.org";
+// $v = find_redirect($v);
+// echo $v;
 
-$v = find_redirect($v);
-echo $v;
-
+// object-oriented client code
+// -----------------------------------------------------------------------------
+// $v = "freephile.org";
+// $v = "equality-tech.com";
+// $obj = new UrlFixer($v);
+// $obj->prefix_scheme();
+// $obj->validate_url();
+// $obj->find_redirect();
+// echo $obj->url;
+// echo $obj;
 
 // could use https://php.net/manual/en/function.filter-input-array.php to setup sanitization for the whole form
 // if there are multiple inputs, but we only need to deal with email and URL
 // will not work with non-ascii domains, but we're only in the U.S.
 // $wikiUrl = filter_input(INPUT_GET, 'wikiUrl', FILTER_VALIDATE_URL);
-function sanitize_url (&$v) {
-  $v = filter_var($v, FILTER_SANITIZE_URL); // clean
-  $v = filter_var($v, FILTER_VALIDATE_URL); // valid
-  return ($v) ? $v : false;
+function sanitize_url(&$v) {
+    $v = filter_var($v, FILTER_SANITIZE_URL); // clean
+    $v = filter_var($v, FILTER_VALIDATE_URL); // valid
+    return ($v) ? $v : false;
 }
 
-
-function is_valid_url ($url="") {
-    if ($url=="") {
+function is_valid_url($url = "") {
+    if ($url == "") {
         //$url=$this->url;
         return false;
     }
     $url = @parse_url($url);
-    if ( ! $url) {
+    if (!$url) {
         return false;
     }
     $url = array_map('trim', $url);
-    $url['port'] = (!isset($url['port'])) ? 80 : (int)$url['port'];
+    $url['port'] = (!isset($url['port'])) ? 80 : (int) $url['port'];
     $path = (isset($url['path'])) ? $url['path'] : '';
 
     if ($path == '') {
         $path = '/';
     }
-    $path .= ( isset ( $url['query'] ) ) ? "?$url[query]" : '';
-    if ( isset ( $url['host'] ) AND $url['host'] != gethostbyname ( $url['host'] ) ) {
-        if ( PHP_VERSION >= 5 ) {
+    $path .= ( isset($url['query']) ) ? "?$url[query]" : '';
+    if (isset($url['host']) AND $url['host'] != gethostbyname($url['host'])) {
+        if (PHP_VERSION >= 5) {
             $headers = get_headers("$url[scheme]://$url[host]:$url[port]$path");
-        }
-        else {
+        } else {
             $fp = fsockopen($url['host'], $url['port'], $errno, $errstr, 30);
-            if ( ! $fp ) {
+            if (!$fp) {
                 return false;
             }
             fputs($fp, "HEAD $path HTTP/1.1\r\nHost: $url[host]\r\n\r\n");
-            $headers = fread ( $fp, 128 );
-            fclose ( $fp );
+            $headers = fread($fp, 128);
+            fclose($fp);
         }
-        $headers = ( is_array ( $headers ) ) ? implode ( "\n", $headers ) : $headers;
-        return ( bool ) preg_match ( '#^HTTP/.*\s+[(200|301|302)]+\s#i', $headers );
+        $headers = ( is_array($headers) ) ? implode("\n", $headers) : $headers;
+        return (bool) preg_match('#^HTTP/.*\s+[(200|301|302)]+\s#i', $headers);
     }
     return false;
 }
 
-/* 
+/*
  * Client code using CiviCRM API
  * 
  * We want to be able to test if a wiki website is in our database.
@@ -152,17 +316,16 @@ drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
 require_once DRUPAL_ROOT . 'sites/default/civicrm.settings.php';
 //require_once  DRUPAL_ROOT . 'sites/all/modules/contrib/civicrm/CRM/Core/Config.php';
 // require_once  DRUPAL_ROOT . 'sites/all/modules/contrib/civicrm/api/api.php';
-$config = CRM_Core_Config::singleton( );
+$config = CRM_Core_Config::singleton();
 //civicrm_initialize();
-
 
 /**
  * Utility for printing
  */
-function pre_print ($result) {
-  echo "<pre>\n";
-  print_r ($result);
-  echo "</pre>\n";
+function pre_print($result) {
+    echo "<pre>\n";
+    print_r($result);
+    echo "</pre>\n";
 }
 
 /**
@@ -171,7 +334,7 @@ function pre_print ($result) {
  * @return array
  *   API result array
 
-function doesWebsiteExist( $website ) {
+  function doesWebsiteExist( $website ) {
   // Check if CiviCRM is installed here.
   if (!module_exists('civicrm')) return false;
 
@@ -179,312 +342,315 @@ function doesWebsiteExist( $website ) {
   civicrm_initialize( );
 
   $params = array(
-    'sequential' => 1,
-    'url' => array('LIKE' => "%$website%")
+  'sequential' => 1,
+  'url' => array('LIKE' => "%$website%")
   );
   try {
-    $result = civicrm_api3( 'Website', 'get', $params );
+  $result = civicrm_api3( 'Website', 'get', $params );
   }
   catch (CiviCRM_API3_Exception $e) {
-    $errorMessage = $e->getMessage();
-    $errorCode = $e->getErrorCode();
-    $errorData = $e->getExtraParams();
-    return array(
-      'error' => $errorMessage,
-      'error_code' => $errorCode,
-      'error_data' => $errorData
-    );
+  $errorMessage = $e->getMessage();
+  $errorCode = $e->getErrorCode();
+  $errorData = $e->getExtraParams();
+  return array(
+  'error' => $errorMessage,
+  'error_code' => $errorCode,
+  'error_data' => $errorData
+  );
   }
   if (!$result) return false;
   return $result;
-}
+  }
 
-// example invocation
-$myContact = doesWebsiteExist('100frontiers.com');
+  // example invocation
+  $myContact = doesWebsiteExist('100frontiers.com');
 
-Array
-(
-    [is_error] => 0
-    [version] => 3
-    [count] => 1
-    [id] => 2525
-    [values] => Array
-        (
-            [0] => Array
-                (
-                    [id] => 2525
-                    [contact_id] => 4327
-                    [url] => http://100frontiers.com
-                    [website_type_id] => 2
-                )
+  Array
+  (
+  [is_error] => 0
+  [version] => 3
+  [count] => 1
+  [id] => 2525
+  [values] => Array
+  (
+  [0] => Array
+  (
+  [id] => 2525
+  [contact_id] => 4327
+  [url] => http://100frontiers.com
+  [website_type_id] => 2
+  )
 
-        )
+  )
 
-)
+  )
 
-if ($myContact) {
-  echo "We've found a website (#{$myContact['values'][0]['id']}) 
-  of {$myContact['values'][0]['url']} 
-  of type {$myContact['values'][0]['website_type_id']} 
+  if ($myContact) {
+  echo "We've found a website (#{$myContact['values'][0]['id']})
+  of {$myContact['values'][0]['url']}
+  of type {$myContact['values'][0]['website_type_id']}
   for contact id {$myContact['values'][0]['contact_id']}";
-}
-*/
-
-
-function getEntity( $entity, $params ) {
-  // Check if CiviCRM is installed here.
-  if (!module_exists('civicrm')) return false;
-  // Initialization call is required to use CiviCRM APIs.
-  civicrm_initialize( );
-  try {
-    $result = civicrm_api3( $entity, 'get', $params );
   }
-  catch (CiviCRM_API3_Exception $e) {
-    $errorMessage = $e->getMessage();
-    $errorCode = $e->getErrorCode();
-    $errorData = $e->getExtraParams();
-    return array(
-      'error' => $errorMessage,
-      'error_code' => $errorCode,
-      'error_data' => $errorData
-    );
-  }
-  if (!$result) return false;
-  return $result['values'];
+ */
+function getEntity($entity, $params) {
+    // Check if CiviCRM is installed here.
+    if (!module_exists('civicrm'))
+        return false;
+    // Initialization call is required to use CiviCRM APIs.
+    civicrm_initialize();
+    try {
+        $result = civicrm_api3($entity, 'get', $params);
+    } catch (CiviCRM_API3_Exception $e) {
+        $errorMessage = $e->getMessage();
+        $errorCode = $e->getErrorCode();
+        $errorData = $e->getExtraParams();
+        return array(
+            'error' => $errorMessage,
+            'error_code' => $errorCode,
+            'error_data' => $errorData
+        );
+    }
+    if (!$result)
+        return false;
+    return $result['values'];
 }
 
-$params = array (
-  'sequential' => 1,
-  'id' => 4327);
+/*
+$params = array(
+    'sequential' => 1,
+    'id' => 4327);
 $myContact = getEntity('contact', $params);
 
 if ($myContact) {
-  // pre_print($myContact);
+    pre_print($myContact);
 }
+*/
+
 
 /* A contact will look like this:
-                    [contact_id] => 4327
-                    [contact_type] => Organization
-                    [contact_sub_type] => 
-                    [sort_name] => 100frontiers.com
-                    [display_name] => 100frontiers.com
-                    [do_not_email] => 0
-                    [do_not_phone] => 0
-                    [do_not_mail] => 0
-                    [do_not_sms] => 0
-                    [do_not_trade] => 0
-                    [is_opt_out] => 0
-                    [legal_identifier] => 
-                    [external_identifier] => 459
-                    [nick_name] => 
-                    [legal_name] => 
-                    [image_URL] => 
-                    [preferred_communication_method] => 
-                    [preferred_language] => en_US
-                    [preferred_mail_format] => Both
-                    [first_name] => 
-                    [middle_name] => 
-                    [last_name] => 
-                    [prefix_id] => 
-                    [suffix_id] => 
-                    [formal_title] => 
-                    [communication_style_id] => 
-                    [job_title] => 
-                    [gender_id] => 
-                    [birth_date] => 
-                    [is_deceased] => 0
-                    [deceased_date] => 
-                    [household_name] => 
-                    [organization_name] => 100frontiers.com
-                    [sic_code] => 
-                    [contact_is_deleted] => 0
-                    [current_employer] => 
-                    [address_id] => 1649
-                    [street_address] => 
-                    [supplemental_address_1] => 
-                    [supplemental_address_2] => 
-                    [city] => Mineral
-                    [postal_code_suffix] => 
-                    [postal_code] => 78125
-                    [geo_code_1] => 
-                    [geo_code_2] => 
-                    [state_province_id] => 1042
-                    [country_id] => 1228
-                    [phone_id] => 
-                    [phone_type_id] => 
-                    [phone] => 
-                    [email_id] => 
-                    [email] => 
-                    [on_hold] => 
-                    [im_id] => 
-                    [provider_id] => 
-                    [im] => 
-                    [worldregion_id] => 2
-                    [world_region] => America South, Central, North and Caribbean
-                    [individual_prefix] => 
-                    [individual_suffix] => 
-                    [communication_style] => 
-                    [gender] => 
-                    [state_province_name] => TX
-                    [state_province] => TX
-                    [country] => United States
-                    [id] => 4327
-*/
+  [contact_id] => 4327
+  [contact_type] => Organization
+  [contact_sub_type] =>
+  [sort_name] => 100frontiers.com
+  [display_name] => 100frontiers.com
+  [do_not_email] => 0
+  [do_not_phone] => 0
+  [do_not_mail] => 0
+  [do_not_sms] => 0
+  [do_not_trade] => 0
+  [is_opt_out] => 0
+  [legal_identifier] =>
+  [external_identifier] => 459
+  [nick_name] =>
+  [legal_name] =>
+  [image_URL] =>
+  [preferred_communication_method] =>
+  [preferred_language] => en_US
+  [preferred_mail_format] => Both
+  [first_name] =>
+  [middle_name] =>
+  [last_name] =>
+  [prefix_id] =>
+  [suffix_id] =>
+  [formal_title] =>
+  [communication_style_id] =>
+  [job_title] =>
+  [gender_id] =>
+  [birth_date] =>
+  [is_deceased] => 0
+  [deceased_date] =>
+  [household_name] =>
+  [organization_name] => 100frontiers.com
+  [sic_code] =>
+  [contact_is_deleted] => 0
+  [current_employer] =>
+  [address_id] => 1649
+  [street_address] =>
+  [supplemental_address_1] =>
+  [supplemental_address_2] =>
+  [city] => Mineral
+  [postal_code_suffix] =>
+  [postal_code] => 78125
+  [geo_code_1] =>
+  [geo_code_2] =>
+  [state_province_id] => 1042
+  [country_id] => 1228
+  [phone_id] =>
+  [phone_type_id] =>
+  [phone] =>
+  [email_id] =>
+  [email] =>
+  [on_hold] =>
+  [im_id] =>
+  [provider_id] =>
+  [im] =>
+  [worldregion_id] => 2
+  [world_region] => America South, Central, North and Caribbean
+  [individual_prefix] =>
+  [individual_suffix] =>
+  [communication_style] =>
+  [gender] =>
+  [state_province_name] => TX
+  [state_province] => TX
+  [country] => United States
+  [id] => 4327
+ */
 
 // chained API call
 $website = '100frontiers.com';
 $params = array(
-  'sequential' => 1,
-  'url' => array('LIKE' => "%$website%"),
-  'api.Contact.get' => array(),
+    'sequential' => 1,
+    'url' => array('LIKE' => "%$website%"),
+    'api.Contact.get' => array(),
 );
-/*  
-if ( $result = getEntity('website', $params) ) {
-  pre_print ($result);
-}
-*/
 /*
-A chained API call results in a deeply nested array
-Array
-(
-    [is_error] => 0
-    [version] => 3
-    [count] => 1
-    [id] => 2525
-    [values] => Array
-        (
-            [0] => Array
-                (
-                    [id] => 2525
-                    [contact_id] => 4327
-                    [url] => http://100frontiers.com
-                    [website_type_id] => 2
-                    [api.Contact.get] => Array
-                        (
-                            [is_error] => 0
-                            [version] => 3
-                            [count] => 1
-                            [id] => 4327
-                            [values] => Array
-                                (
-                                    [0] => Array
-                                        (
-                                            [contact_id] => 4327
-                                            [contact_type] => Organization
-                                            [contact_sub_type] => 
-                                            [sort_name] => 100frontiers.com
-                                            [display_name] => 100frontiers.com
-                                            [do_not_email] => 0
-                                            [do_not_phone] => 0
-                                            [do_not_mail] => 0
-                                            [do_not_sms] => 0
-                                            [do_not_trade] => 0
-                                            [is_opt_out] => 0
-                                            [legal_identifier] => 
-                                            [external_identifier] => 459
-                                            [nick_name] => 
-                                            [legal_name] => 
-                                            [image_URL] => 
-                                            [preferred_communication_method] => 
-                                            [preferred_language] => en_US
-                                            [preferred_mail_format] => Both
-                                            [first_name] => 
-                                            [middle_name] => 
-                                            [last_name] => 
-                                            [prefix_id] => 
-                                            [suffix_id] => 
-                                            [formal_title] => 
-                                            [communication_style_id] => 
-                                            [job_title] => 
-                                            [gender_id] => 
-                                            [birth_date] => 
-                                            [is_deceased] => 0
-                                            [deceased_date] => 
-                                            [household_name] => 
-                                            [organization_name] => 100frontiers.com
-                                            [sic_code] => 
-                                            [contact_is_deleted] => 0
-                                            [current_employer] => 
-                                            [address_id] => 1649
-                                            [street_address] => 
-                                            [supplemental_address_1] => 
-                                            [supplemental_address_2] => 
-                                            [city] => Mineral
-                                            [postal_code_suffix] => 
-                                            [postal_code] => 78125
-                                            [geo_code_1] => 
-                                            [geo_code_2] => 
-                                            [state_province_id] => 1042
-                                            [country_id] => 1228
-                                            [phone_id] => 
-                                            [phone_type_id] => 
-                                            [phone] => 
-                                            [email_id] => 
-                                            [email] => 
-                                            [on_hold] => 
-                                            [im_id] => 
-                                            [provider_id] => 
-                                            [im] => 
-                                            [worldregion_id] => 2
-                                            [world_region] => America South, Central, North and Caribbean
-                                            [individual_prefix] => 
-                                            [individual_suffix] => 
-                                            [communication_style] => 
-                                            [gender] => 
-                                            [state_province_name] => TX
-                                            [state_province] => TX
-                                            [country] => United States
-                                            [id] => 4327
-                                        )
-
-                                )
-
-                        )
-
-                )
-
-        )
-
-)
-*/
-function createEntity( $entity, $params ) {
-  // Check if CiviCRM is installed here.
-  if (!module_exists('civicrm')) return false;
-  // Initialization call is required to use CiviCRM APIs.
-  civicrm_initialize( );
-  try {
-    $result = civicrm_api3( $entity, 'create', $params );
+  if ( $result = getEntity('website', $params) ) {
+    pre_print ($result);
   }
-  catch (CiviCRM_API3_Exception $e) {
-    $errorMessage = $e->getMessage();
-    $errorCode = $e->getErrorCode();
-    $errorData = $e->getExtraParams();
-    return array(
-      'error' => $errorMessage,
-      'error_code' => $errorCode,
-      'error_data' => $errorData
-    );
-  }
-  if (!$result) return false;
-  return $result;
+ */
+/*
+  A chained API call results in a deeply nested array
+  Array
+  (
+  [is_error] => 0
+  [version] => 3
+  [count] => 1
+  [id] => 2525
+  [values] => Array
+  (
+  [0] => Array
+  (
+  [id] => 2525
+  [contact_id] => 4327
+  [url] => http://100frontiers.com
+  [website_type_id] => 2
+  [api.Contact.get] => Array
+  (
+  [is_error] => 0
+  [version] => 3
+  [count] => 1
+  [id] => 4327
+  [values] => Array
+  (
+  [0] => Array
+  (
+  [contact_id] => 4327
+  [contact_type] => Organization
+  [contact_sub_type] =>
+  [sort_name] => 100frontiers.com
+  [display_name] => 100frontiers.com
+  [do_not_email] => 0
+  [do_not_phone] => 0
+  [do_not_mail] => 0
+  [do_not_sms] => 0
+  [do_not_trade] => 0
+  [is_opt_out] => 0
+  [legal_identifier] =>
+  [external_identifier] => 459
+  [nick_name] =>
+  [legal_name] =>
+  [image_URL] =>
+  [preferred_communication_method] =>
+  [preferred_language] => en_US
+  [preferred_mail_format] => Both
+  [first_name] =>
+  [middle_name] =>
+  [last_name] =>
+  [prefix_id] =>
+  [suffix_id] =>
+  [formal_title] =>
+  [communication_style_id] =>
+  [job_title] =>
+  [gender_id] =>
+  [birth_date] =>
+  [is_deceased] => 0
+  [deceased_date] =>
+  [household_name] =>
+  [organization_name] => 100frontiers.com
+  [sic_code] =>
+  [contact_is_deleted] => 0
+  [current_employer] =>
+  [address_id] => 1649
+  [street_address] =>
+  [supplemental_address_1] =>
+  [supplemental_address_2] =>
+  [city] => Mineral
+  [postal_code_suffix] =>
+  [postal_code] => 78125
+  [geo_code_1] =>
+  [geo_code_2] =>
+  [state_province_id] => 1042
+  [country_id] => 1228
+  [phone_id] =>
+  [phone_type_id] =>
+  [phone] =>
+  [email_id] =>
+  [email] =>
+  [on_hold] =>
+  [im_id] =>
+  [provider_id] =>
+  [im] =>
+  [worldregion_id] => 2
+  [world_region] => America South, Central, North and Caribbean
+  [individual_prefix] =>
+  [individual_suffix] =>
+  [communication_style] =>
+  [gender] =>
+  [state_province_name] => TX
+  [state_province] => TX
+  [country] => United States
+  [id] => 4327
+  )
+
+  )
+
+  )
+
+  )
+
+  )
+
+  )
+ */
+
+function createEntity($entity, $params) {
+    // Check if CiviCRM is installed here.
+    if (!module_exists('civicrm'))
+        return false;
+    // Initialization call is required to use CiviCRM APIs.
+    civicrm_initialize();
+    try {
+        $result = civicrm_api3($entity, 'create', $params);
+    } catch (CiviCRM_API3_Exception $e) {
+        $errorMessage = $e->getMessage();
+        $errorCode = $e->getErrorCode();
+        $errorData = $e->getExtraParams();
+        return array(
+            'error' => $errorMessage,
+            'error_code' => $errorCode,
+            'error_data' => $errorData
+        );
+    }
+    if (!$result)
+        return false;
+    return $result;
 }
-
 
 // when creating an individual record, you can input the "organization_name" because
 // it's just a text value in the contact table
- $params = array(
-  'sequential' => 1,
-  'contact_type' => "Individual",
-  'first_name' => "Richard",
-  'last_name' => "Noll",
-  // 'organization_name' => "Activeworlds  Inc.", // "contact_id": "4143"
-  'api.Relationship.create' => array(
-    'sequential' => "1", 
-    'relationship_type_id' => "5", 
-    'contact_id_a' => "\$value.id",
-    'contact_id_b' => "4143"
+$params = array(
+    'sequential' => 1,
+    'contact_type' => "Individual",
+    'first_name' => "Richard",
+    'last_name' => "Noll",
+    // 'organization_name' => "Activeworlds  Inc.", // "contact_id": "4143"
+    'api.Relationship.create' => array(
+        'sequential' => "1",
+        'relationship_type_id' => "5",
+        'contact_id_a' => "\$value.id",
+        'contact_id_b' => "4143"
     ),
-  "debug" => "1",
+    "debug" => "1",
 );
 
 // Create a Contact, with a nested call to create a relationship (employer)
@@ -619,16 +785,17 @@ Array
 
 
 // See the data
+// -----------------------------------------------------------------------------
 
-/*
+
 $result = civicrm_api3('Note', 'get', array(
   'sequential' => 1,
   'note' => array('IS NOT NULL' => 1),
-  'options' => array('limit' => 10),
+  'options' => array('limit' => 20),
 ));
 
 // pre_print($result);
-
+// $result['values'] is an array where each member looks like this
 //      [2] => Array
 //          (
 //              [id] => 2317
@@ -640,7 +807,9 @@ $result = civicrm_api3('Note', 'get', array(
 //              [privacy] => 0
 //          )
 
-
+/*
+// functional client code
+// -----------------------------------------------------------------------------
 $return = '';
 foreach ($result['values'] as $k => $v) {
   $return .= "record $k ({$v['id']})\n";
@@ -652,7 +821,35 @@ echo nl2br($return);
 */
 
 
+// object client code
+if ( count($result['values']) ) {
+    echo "Working on " . count($result['values']) . " results.\n<br />";    
+}
+// pre_print($result['values']);
 
+foreach ($result['values'] as $k => $v) {
+    // if it's semi-colon separated, make an array
+    // if it's just a string, we'll still get an array
+    $urls = explode(';', $v['note']);
+    // those with multiple values are often/always duplicates
+    $urls = array_unique($urls);
+    //echo (count($urls) > 1) ? "working on multiple\n<br />" : "";
+    foreach ($urls as $key => $value) {
+        // echo nl2br("Working on $value\n");
+        $obj = new UrlFixer($value);
+        $obj->prefix_scheme();
+        $obj->validate_url();
+        $obj->find_redirect();
+        // echo $obj->url . "<br />";
+        echo $obj->__toString() . "\n<br />";
+        // echo "We should update " . $v['entity_id'] . " in " . $v['entity_table'] . "\n<br />";
+    } 
+}
+
+
+
+// $headers = get_headers("http://wikitravel.org", 1); // a 302 example
+// pre_print($headers);
 // $headers = get_headers("http://freephile.org", 1);
 // pre_print($headers);
 /*
@@ -748,6 +945,11 @@ When you pass the second, optional, argument to get_headers, the
 function follows redirects (and returns everything in an associative array.
 You don't even need to bother with logic to figure out the real 
 URL...just use the last value of ['Location']; or the original if [0] is 200
+
+However, in testing, I found that a 302 (found) response can have a relative
+['Location'] header like '/en/Main_Page'  so, if the Location is relative, then 
+we need to rebuild (prefix) the scheme and host
+
 Array
 (
     [0] => HTTP/1.1 301 Moved Permanently
@@ -829,6 +1031,3 @@ Array
     [Pragma] => no-cache
 )
 */
-
-
-
