@@ -36,9 +36,9 @@ class UrlWiki extends \eqt\wikireport\Url {
     
     public $url;
     
-    protected $wikiUrl;
+    public $wikiUrl;
     
-    protected $apiUrl;
+    public $apiUrl;
     
     public $msg;
     
@@ -64,11 +64,14 @@ class UrlWiki extends \eqt\wikireport\Url {
             
             $data = file_get_contents($this->url);
             $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
+
             // a valid MediaWiki page will have a link like so
             // <link rel="EditURI" type="application/rsd+xml" href="https://freephile.org/w/api.php?action=rsd" />
             // if ( preg_match( '#<link rel="EditURI" type="application/rsd\+xml" href="(.*)\?action=rsd"#', $data, $matches) ) {
             if ( preg_match( '#EditURI.* href\="(.*)\?action\=rsd"#U', $data, $matches) ) {
                 $apiUrl = $matches[1];
+                $this->prefix_scheme($this->parsedUrl['scheme'], $apiUrl);
+                
                 $fullUrl = $apiUrl . $apiQuery;
                 $data = file_get_contents($fullUrl);
                 $data = json_decode($data, true);

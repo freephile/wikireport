@@ -1,4 +1,5 @@
 <?php
+
 /**
  * A reporting interface to the MediaWiki API interfacing with the CiviCRM API
  *
@@ -60,6 +61,7 @@ class Url {
         $this->msg = array();
         $this->orginalUrl = $this->url = $url;
         $this->sanitize_url();
+        $this->prefix_scheme(); // make up for lazy web people
         $this->parsedUrl = parse_url($this->url);
     }
     
@@ -117,20 +119,23 @@ class Url {
      * @param string $scheme
      * @return boolean
      */
-    function prefix_scheme($scheme = 'http://') {
-        if ( substr($this->url, 0, strlen($scheme)) == $scheme ) {
-            $this->msg[] = __METHOD__ . ": $this->url already begins with $scheme";
-            return true;
+    function prefix_scheme($scheme = 'http://', &$url='') {
+        if ($url == '') {
+            $url = $this->url;
         }
-        if ( substr($this->url, 0, 2) == '//' ) {
-            $this->mgs[] = __METHOD__ . ": $this->url used protocol relative '//', now using full $scheme";
-            $this->url = $scheme . substr($this->url, 2);
-            return true;
+        if ( substr($url, 0, strlen($scheme)) == $scheme ) {
+            $this->msg[] = __METHOD__ . ": $url already begins with $scheme";
+            return $url;
+        }
+        if ( substr($url, 0, 2) == '//' ) {
+            $this->mgs[] = __METHOD__ . ": $url used protocol relative '//', now using full $scheme";
+            $url = $scheme . substr($url, 2);
+            return $url;
         }
         
-        $this->msg[] = __METHOD__ . ": $this->url prefixed with $scheme";
-        $this->url = $scheme . $this->url;
-        return true;
+        $this->msg[] = __METHOD__ . ": $url prefixed with $scheme";
+        $url = $scheme . $url;
+        return $url;
     }
     
     /**

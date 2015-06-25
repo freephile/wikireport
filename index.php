@@ -19,66 +19,21 @@
  *  along with this program in the LICENSE file
  *  If not, see <http://www.gnu.org/licenses/>.
  */
-
-
-
-
-
-/**
- * a convenience function to remember if a checkbox was submitted.
- */
-function isChecked($checkname, $checkvalue) {
-  if( !empty($_POST[$checkname])) {
-    foreach($_POST[$checkname] as $value) {
-      if ($checkvalue == $value) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function objectToArray ($object) {
-  if(!is_object($object) && !is_array($object))
-      return $object;
-
-  return array_map('objectToArray', (array) $object);
-}
-
-/**
- * operate on a value to create a hyperlink
- * if the value is a scalar URL
- * @return boolean TRUE if linkified
- */
-function linkify (&$v) {
-  if ( is_string($v) && strlen($v) ) {
-    if ( parse_url($v, PHP_URL_SCHEME)  ) {
-      $v = "<a href=\"$v\">$v</a>";
-    }
-    return true;
-  }
-  return false;
-}
-
-
+// composer libraries
+require __DIR__ . '/vendor/autoload.php';
+$form   = new \eqt\wikireport\Form();
 // whitelist myself so I don't have to answer the captcha
 $ipWhitelist = array('50.177.140.82', '127.0.0.1');
 // echo $_SERVER['REMOTE_ADDR'];
+// url is pre-fillable via querystring
+// FILTER_VALIDATE_URL will not work with non-ascii domains, but we're only in the U.S.
+$url = filter_input(INPUT_GET, 'url', FILTER_SANITIZE_URL);
 
-// $wikiUrl = isset($_GET["wikiUrl"])? htmlspecialchars($_GET["wikiUrl"]) : '';
-// will not work with non-ascii domains, but we're only in the U.S.
-$wikiUrl = filter_input(INPUT_GET, 'wikiUrl', FILTER_VALIDATE_URL);
-
-if ( isset($_POST["submit"]) ) {
-  // composer libraries
-  require __DIR__ . '/vendor/autoload.php';
-  
-  $wikiUrl = htmlspecialchars($_POST['wikiUrl']);
-  // Check if wikiUrl has been entered
-  if (!$wikiUrl) {
-    $errWikiUrl = 'Please enter the full location where your wiki is hosted (e.g. http://example.com/wiki)';
-  } elseif (!stristr($wikiUrl,'http')) {
-    $errWikiUrl = 'Please include the protocol portion (either http:// or https://)';
+if ( isset($_POST["submit"]) ) {  
+  // Check if url has been entered
+  $url = filter_input(INPUT_POST, 'url', FILTER_SANITIZE_URL);
+  if ( empty($url)) {
+    $errUrl = 'Please enter the full location where your wiki is hosted (e.g. example.com/wiki)';
   }
   // do reCaptcha verification for anyone not from hq
   if (!in_array($_SERVER['REMOTE_ADDR'], $ipWhitelist)) {
@@ -92,47 +47,23 @@ if ( isset($_POST["submit"]) ) {
     }    
   }
 
-  // If there are no errors, do work and display
-  // This is still hard-coded, but eventually we may want to put in an interface that lets you look at other
-  // parts of the api
-  // finding the location of api.php
-  if ( !isset($errWikiUrl) && !isset($errHuman) ) {
-    $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
-    if ( substr($wikiUrl,-7) == 'api.php' ) {
-      $apiUrl = $wikiUrl;
-      $fullUrl = $apiUrl . $apiQuery;
-      $data = file_get_contents($fullUrl);
-    } else {
-      // two requests to get the json
-      $data = file_get_contents($wikiUrl);
-      // a valid MediaWiki page will have a link like so
-      // <link rel="EditURI" type="application/rsd+xml" href="https://freephile.org/w/api.php?action=rsd" />
-      // if ( preg_match( '#<link rel="EditURI" type="application/rsd\+xml" href="(.*)\?action=rsd"#', $data, $matches) ) {
-      if ( preg_match( '#EditURI.* href\="(.*)\?action\=rsd"#U', $data, $matches) ) {
-        $apiUrl = $matches[1];
-        $fullUrl = $apiUrl . $apiQuery;
-        $data = file_get_contents($fullUrl);
-        // we can just record whatever URL is given as the wiki URL.  We don't have to canonicalize it
-        // We could record the apiUrl in our database as the canonical reference to identify a wiki.
-        // OR, even better, the 'base' attribute in the 'general' property shows the "Main Page" URL
-        // There is <link rel="alternate" hreflang="x-default" href="/wiki/Music" /> that we could use
-        // to canonicalize the wikiUrl from the client, but I don't see the point.
+  if ( !isset($errUrl) && !isset($errHuman) ) {
+
+      $format = new \eqt\wikireport\Format();
+      $wurl    = new \eqt\wikireport\UrlWiki($url);
+ 
+
+      if ( $wurl->isWiki() ) {
+        $mwApi  = new \eqt\wikireport\mwApi($wurl->apiUrl);
+        $mwApi->makeQuery();
+        $data = $mwApi->data;
+        // $format->pre_print($data);
+        // exit();
       } else {
-        // bad wikiUrl
-        $errWikiUrl = "No wiki found at that URL";
+        // bad url
+        $errUrl = "No wiki found at that URL";
       }
     }
-    
-    
-    
-    // define constants for comparison
-    define( "CURRENT_VERSION", '1.26wmf8');
-    define( "CURRENT_URL", 'https://en.wikipedia.org/');
-    define( "CURRENT_DATE", "2015/06/05");
-    // assign them to variables for easier output
-    $current_version = CURRENT_VERSION;
-    $current_url = CURRENT_URL;
-    $current_date = CURRENT_DATE;
     
     // https://php.net/manual/en/function.json-decode.php
     // With json_decode(), you either get an object, or using the optional second
@@ -150,34 +81,31 @@ if ( isset($_POST["submit"]) ) {
     $extensions = $data['query']['extensions'];
     $statistics = $data['query']['statistics'];
     
-    $canonicalWikiUrl = $general['base'];
-    if (empty($canonicalWikiUrl)) {
+    $canonicalUrl = $general['base'];
+    if (empty($canonicalUrl)) {
       $errWikiPerm = "No Soup for YOU!";
     }
     
-    if ( isset($errWikiUrl) ) {
+    if ( isset($errUrl) ) {
       $result =  <<<HERE
-        <div class="alert alert-danger">We could not detect a wiki at $wikiUrl
+        <div class="alert alert-danger">We could not detect a wiki at $url
         </div>
 HERE;
     } else if ( isset($errWikiPerm) ) {
       $result =  <<<HERE
-        <div class="alert alert-danger">Wiki detected at $wikiUrl, but we can't report on it.
+        <div class="alert alert-danger">Wiki detected at $url, but we can't report on it.
         </div>
 HERE;
     } else {
       $result =  <<<HERE
-        <div class="alert alert-success">You're running $version at $wikiUrl<br />
-        This is compared to $current_version which was found running at $current_url as of $current_date
+        <div class="alert alert-success">You're running $version at $url<br />
+        This is compared to {$mwApi->current_version} which was found running at $mwApi->current_url as of $mwApi->current_date
         </div>
 HERE;
     }
-  } else {
-    $result='<div class="alert alert-danger">Sorry there was an error.</div>';
-  }
-
-  
 }
+  
+
 ?>
 
 <!DOCTYPE html>
@@ -201,10 +129,10 @@ HERE;
           <h1 class="page-header text-center">What's that wiki running?</h1>
         <form id="wr" class="form-horizontal" role="form" method="post" action="">
           <div class="form-group">
-            <label for="wikiUrl" class="col-sm-2 control-label">Wiki URL</label>
+            <label for="url" class="col-sm-2 control-label">Wiki URL</label>
             <div class="col-sm-10">
-              <input type="url" class="form-control" id="wikiUrl" name="wikiUrl" placeholder="https://example.com" value="<?php echo $wikiUrl; ?>">
-              <?php if ( isset($errWikiUrl) ) { echo "<p class='text-danger'>$errWikiUrl</p>"; } ?>
+              <input type="url" class="form-control" id="url" name="url" placeholder="https://example.com" value="<?php echo $url; ?>">
+              <?php if ( isset($errUrl) ) { echo "<p class='text-danger'>$errUrl</p>"; } ?>
               <?php if ( isset($errWikiPerm) ) { echo "<p class='text-danger'>$errWikiPerm</p>"; } ?>
             </div>
           </div>
@@ -212,15 +140,15 @@ HERE;
             <label class="col-sm-2 control-label">Show Me</label>
             <div class="col-sm-10 col-sm-offset-2"> 
               <label class="checkbox checkbox-success" for="general">
-                <input type="checkbox" value="general" id="general" name="options[]" <?php echo (isChecked("options", "general"))? 'checked="checked"' : '' ?>/>
+                <input type="checkbox" value="general" id="general" name="options[]" <?php echo ($form->isChecked("options", "general"))? 'checked="checked"' : '' ?>/>
                 Wiki Report
               </label>
               <label class="checkbox checkbox-success" for="extensions">
-                <input type="checkbox" value="extensions" id="extensions" name="options[]" <?php echo (isChecked("options", "extensions"))? 'checked="checked"' : '' ?>/>
+                <input type="checkbox" value="extensions" id="extensions" name="options[]" <?php echo ($form->isChecked("options", "extensions"))? 'checked="checked"' : '' ?>/>
                 Extensions
               </label>
               <label class="checkbox checkbox-success" for="statistics">
-                <input type="checkbox" value="statistics" id="statistics" name="options[]" <?php echo (isChecked("options", "statistics"))? 'checked="checked"' : '' ?>/>
+                <input type="checkbox" value="statistics" id="statistics" name="options[]" <?php echo ($form->isChecked("options", "statistics"))? 'checked="checked"' : '' ?>/>
                 Statistics
               </label>
             </div>
@@ -264,7 +192,10 @@ HERE;
     // use casting
     // $tabledata = (array) $general;
 
-    $options = $_REQUEST['options'];
+    $options = array();
+    if ( isset($_POST['options']) ) {
+        $options = $_POST['options'];
+    }
     
     if( in_array('general', $options) || count($options)==0) {
       $tabledata = (array) $general;
@@ -279,7 +210,8 @@ HERE;
           <tbody>
 HERE;
       foreach ( $tabledata as $k => $v ) {
-        linkify($v);
+        $format->linkify($v);
+        $v = $format->implode($v); // avoid array to string conversion and no output
         echo "<tr><th>$k</th><td>$v</td></tr>";
       }
       echo "</tbody>
@@ -305,8 +237,8 @@ HERE;
 HERE;
         foreach ($v as $key => $value) {
           if ( (strlen($value)) && ($key != 'name') ) {
-            // if value starts with http or is a protocol-relative URL, then linkify it
-            linkify($value);
+            $format->linkify($value);
+            $value = $format->implode($value);
             echo "<tr><th>$key</th><td>$value</td></tr>";
           }
         }
@@ -429,8 +361,8 @@ $(document).ready(function() {
     
 /**
       $(document).ready(function() {
-        var wikiUrl = $( "#wikiUrl" ).val();
-        var fullUrl = wikiUrl +  apiQuery;
+        var url = $( "#url" ).val();
+        var fullUrl = url +  apiQuery;
         $.ajax({
           url: fullUrl
         })
@@ -441,19 +373,19 @@ $(document).ready(function() {
         });
       });
     
-    function makeQueryUrl (wikiUrl, apiQuery) {
-      if ( (wikiUrl == '') || (typeof wikiUrl == 'undefined') ) {
-        wikiUrl = $( "#wikiUrl" ).val();
+    function makeQueryUrl (url, apiQuery) {
+      if ( (url == '') || (typeof url == 'undefined') ) {
+        url = $( "#url" ).val();
       }
       if ( (apiQuery == '') || (typeof apiQuery == 'undefined') ) {
         apiQuery = '/api.php?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
       }
-      return wikiUrl + apiQuery;
+      return url + apiQuery;
     }
 
     $( "#wr" ).submit(function( event ) {
         var apiQuery = '/api.php?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
-        var fullUrl = $( "#wikiUrl" ).val() + apiQuery;
+        var fullUrl = $( "#url" ).val() + apiQuery;
         $( "#wikigeneral" ).text( fullUrl ).show().fadeIn( 100 );
         event.preventDefault();
     });  
