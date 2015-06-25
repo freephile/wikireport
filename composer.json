@@ -1,5 +1,28 @@
 {
-  "require": {
-    "google/recaptcha": "~1.1"
-  }
+    "name": "eqt/wikireport",
+    
+    "description": "The Wiki Report",
+    
+    "keywords": ["Business Intelligence", "Reporting", "API", "API Integration"],
+    
+    "license": "GPL v3 or later",
+    
+    "homepage": "https://freephile.org/wikireport",
+    
+    "authors": [
+        {
+            "name": "Greg Rundlett",
+            "email": "greg@freephile.com",
+            "homepage": "http://eQuality-Tech.com",
+            "role": "Developer"
+        }
+    ],
+    
+    "require": {
+        "google/recaptcha": "~1.1"
+    },
+    
+    "autoload": {
+        "psr-4": {"eqt\\": "vendor/eqt/"}
+    }
 }
