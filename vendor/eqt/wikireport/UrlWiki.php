@@ -46,6 +46,8 @@ class UrlWiki extends \eqt\wikireport\Url {
     
     private $isWiki;
     
+    public $data;
+    
 
     /**
      * getter/setter for $this->isWiki
@@ -61,8 +63,15 @@ class UrlWiki extends \eqt\wikireport\Url {
             return $this->isWiki;
             
         } else {
-            
             $data = file_get_contents($this->url);
+            // short-circuit if we can't even connect to $this->url
+            if ($data === false) {
+                $this->isWiki = false;
+                $msg = "Unable to get any content at $this->url (bad URL?) ";
+                $this->msg[] = __METHOD__ . ": $msg";
+                
+                return false;                
+            }
             $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
 
             // a valid MediaWiki page will have a link like so
@@ -70,23 +79,47 @@ class UrlWiki extends \eqt\wikireport\Url {
             // if ( preg_match( '#<link rel="EditURI" type="application/rsd\+xml" href="(.*)\?action=rsd"#', $data, $matches) ) {
             if ( preg_match( '#EditURI.* href\="(.*)\?action\=rsd"#U', $data, $matches) ) {
                 $apiUrl = $matches[1];
+                // fix up protocol relative apiUrl
                 $this->prefix_scheme($this->parsedUrl['scheme'], $apiUrl);
-                
-                $fullUrl = $apiUrl . $apiQuery;
-                $data = file_get_contents($fullUrl);
-                $data = json_decode($data, true);
-                $this->wikiUrl = $data['query']['general']['base'];
-                $this->apiUrl = $apiUrl;
-                $this->isWiki = true;
-                $this->msg[] = __METHOD__ . ": wiki found at $this->wikiUrl (given $this->url)";
+            } elseif ( preg_match( '#meta name="generator"[^>]* content="MediaWiki#U', $data, $matches ) ) {
+                // older versions of MediaWiki don't have a EditURI link, but 
+                // do have the "generator" link so, if we detect that, then we'll
+                // guess at the API endpoint
+                // <meta name="generator" content="MediaWiki 1.15.1" />
+                // <meta name="generator" content="MediaWiki 1.16.5" />
+                $apiUrl = $this->parsedUrl['scheme'] . '://';
+                $apiUrl .= $this->parsedUrl['host'];
+                $apiUrl .= isset($this->parsedUrl['port'])? ':' . $this->parsedUrl['port'] : '';
+                // if the path contains 'index.php', grab the portion before that.
+                if (strstr($this->parsedUrl['path'], 'index.php')) { 
+                    $apiUrl .= substr($this->parsedUrl['path'], 0, 
+                            strpos($this->parsedUrl['path'], 'index.php'));
+                } elseif (strstr($this->parsedUrl['path'], 'wiki')) { 
+                // clean URLs with 'wiki', grab the portion before that (probably just a slash)
+                    $apiUrl .= substr($this->parsedUrl['path'], 0, 
+                            strpos($this->parsedUrl['path'], 'wiki'));
+                    $apiUrl .= 'wiki/';
+                }
+                $apiUrl .= "api.php";
             } else {
                 $this->isWiki = false;
                 $msg = "No wiki found at ";
                 $msg .= ($this->wikiUrl)? $this->wikiUrl : "'null'";
                 $msg .= " (given $this->url)";
                 $this->msg[] = __METHOD__ . ": $msg";
+                return false;
             }
-            
+            $fullUrl = $apiUrl . $apiQuery;
+            //echo "<pre>";var_dump($this->parsedUrl);echo "</pre>";
+            //echo "<pre>";var_dump($apiUrl);echo "</pre>";
+            $data = file_get_contents($fullUrl);
+            $data = json_decode($data, true);
+            $this->data = $data;
+            $this->wikiUrl = $data['query']['general']['base'];
+            $this->apiUrl = $apiUrl;
+            $this->isWiki = true;
+            $this->msg[] = __METHOD__ . ": wiki found at $this->wikiUrl (given $this->url)";
+
             return $this->isWiki;
             
         }

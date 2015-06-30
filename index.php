@@ -33,7 +33,7 @@ if ( isset($_POST["submit"]) ) {
   // Check if url has been entered
   $url = filter_input(INPUT_POST, 'url', FILTER_SANITIZE_URL);
   if ( empty($url)) {
-    $errUrl = 'Please enter the full location where your wiki is hosted (e.g. example.com/wiki)';
+    $errUrl = 'Please enter the full location where your wiki is hosted (e.g. http://www.example.com/wiki)';
   }
   // do reCaptcha verification for anyone not from hq
   if (!in_array($_SERVER['REMOTE_ADDR'], $ipWhitelist)) {
@@ -48,15 +48,14 @@ if ( isset($_POST["submit"]) ) {
   }
 
   if ( !isset($errUrl) && !isset($errHuman) ) {
-
+      $data = '';
       $format = new \eqt\wikireport\Format();
-      $wurl    = new \eqt\wikireport\UrlWiki($url);
- 
+      $wurl    = new \eqt\wikireport\UrlWiki($url); 
 
       if ( $wurl->isWiki() ) {
-        $mwApi  = new \eqt\wikireport\mwApi($wurl->apiUrl);
-        $mwApi->makeQuery();
-        $data = $mwApi->data;
+        $MwApi  = new \eqt\wikireport\MwApi($wurl->apiUrl);
+        $MwApi->makeQuery();
+        $data = $MwApi->data;
         // $format->pre_print($data);
         // exit();
       } else {
@@ -88,19 +87,19 @@ if ( isset($_POST["submit"]) ) {
     
     if ( isset($errUrl) ) {
       $result =  <<<HERE
-        <div class="alert alert-danger">We could not detect a wiki at $url
+        <div class="alert alert-danger">We could not detect a wiki at <a href="$url" target="_blank">$url</a>
         </div>
 HERE;
     } else if ( isset($errWikiPerm) ) {
       $result =  <<<HERE
-        <div class="alert alert-danger">Wiki detected at $url, but we can't report on it.
+        <div class="alert alert-danger">Wiki detected at <a href="$url" target="_blank">$url</a>, but we can't report on it.
         </div>
 HERE;
     } else {
       $result =  <<<HERE
-        <div class="alert alert-success">You're running $version at $url<br />
-        This is compared to {$mwApi->current_version} which was found running at $mwApi->current_url as of $mwApi->current_date
-        </div>
+        <div class="alert alert-success">You're running $version at <a href="$url" target="_blank">$url</a><br />
+        This is compared to {$MwApi->current_version} which was found running at $MwApi->current_url as of $MwApi->current_date
+        Check the <a href="https://www.mediawiki.org/wiki/Release_notes" target="_blank">Release Notes</a></div>
 HERE;
     }
 }
@@ -131,7 +130,9 @@ HERE;
           <div class="form-group">
             <label for="url" class="col-sm-2 control-label">Wiki URL</label>
             <div class="col-sm-10">
-              <input type="url" class="form-control" id="url" name="url" placeholder="https://example.com" value="<?php echo $url; ?>">
+              <input type="url" class="form-control typeahead" id="url" name="url" placeholder="https://example.com" value="<?php echo $url; ?>"
+                    onfocus="if (!this.value) { this.value = 'http://'; } else return false" 
+                    onblur="if (this.value == 'http://') { this.value = ''; } else return false" />
               <?php if ( isset($errUrl) ) { echo "<p class='text-danger'>$errUrl</p>"; } ?>
               <?php if ( isset($errWikiPerm) ) { echo "<p class='text-danger'>$errWikiPerm</p>"; } ?>
             </div>
@@ -140,15 +141,18 @@ HERE;
             <label class="col-sm-2 control-label">Show Me</label>
             <div class="col-sm-10 col-sm-offset-2"> 
               <label class="checkbox checkbox-success" for="general">
-                <input type="checkbox" value="general" id="general" name="options[]" <?php echo ($form->isChecked("options", "general"))? 'checked="checked"' : '' ?>/>
+                <input type="checkbox" value="general" id="general" name="options[]" 
+                    <?php echo ($form->isChecked("options", "general"))? 'checked="checked"' : '' ?>/>
                 Wiki Report
               </label>
               <label class="checkbox checkbox-success" for="extensions">
-                <input type="checkbox" value="extensions" id="extensions" name="options[]" <?php echo ($form->isChecked("options", "extensions"))? 'checked="checked"' : '' ?>/>
+                <input type="checkbox" value="extensions" id="extensions" name="options[]" 
+                    <?php echo ($form->isChecked("options", "extensions"))? 'checked="checked"' : '' ?>/>
                 Extensions
               </label>
               <label class="checkbox checkbox-success" for="statistics">
-                <input type="checkbox" value="statistics" id="statistics" name="options[]" <?php echo ($form->isChecked("options", "statistics"))? 'checked="checked"' : '' ?>/>
+                <input type="checkbox" value="statistics" id="statistics" name="options[]" 
+                    <?php echo ($form->isChecked("options", "statistics"))? 'checked="checked"' : '' ?>/>
                 Statistics
               </label>
             </div>
@@ -294,102 +298,26 @@ HERE;
 
       ga('create', 'UA-39339059-2', 'auto');
       ga('send', 'pageview');
-    
-    /*
-$(document).ready(function() {
-  $.ajax({
-    url: "https://freephile.org/w/api.php",
-    // url: "http://en.banglapedia.org/api.php",
-    jsonp: "callback",
-    dataType: "jsonp",
-    data: {
-      action: "query",
-      meta: "siteinfo",
-      format: "json",
-      siprop: "general|extensions|statistics"
-      // siprop: "general|extensions|statistics"
-    },
-    success: function( data ) {
-      // console.log(Object.keys(data));
-      var text = '';
-      var myObj = data.query.general;
-      Object.getOwnPropertyNames(myObj).every(function(val, idx, array) {
-        if ( (myObj[val] == '') || (typeof myObj[val] == 'undefined') ) {
-          return false;
-        } else {
-          console.log( val + ' -> ' + myObj[val]);
-          text +=  '<li>' + val + ' -> ' + myObj[val] + "</li>\n";
-          return true;
-        }
-      });
-      $( "#wikigeneral" ).html(text);
-      //alert(text);
-      delete myObj;
-      var text = '';
-      var myObj = data.query.extensions;
-      Object.getOwnPropertyNames(myObj).every(function(val, idx, array) {
-        if ( (myObj[val] == '') || (typeof myObj[val] == 'undefined') ) {
-          return false;
-        } else if (typeof myObj[val] == 'object') {
-          console.log( val + ' -> nested ');
-          text +=  '<li>' + val + ' -> nested ';
-          nestedObj = myObj[val];
-          Object.getOwnPropertyNames(nestedObj).every(function(val, idx, array) {
-            console.log( val + ' -> ' + nestedObj[val]);
-            text +=  val + ' -> ' + nestedObj[val] + "</li>\n";
-          });
-        } else {
-          console.log( val + ' -> ' + myObj[val]);
-          text +=  '<li>' + val + ' -> ' + myObj[val] + "</li>\n";
-          return true;
-        }
-      });
-      $( "#wikiextensions" ).html(text);
-      delete myObj;
-      var text = '';
-      var myObj = data.query.statistics;
-      // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/getOwnPropertyNames
-      Object.getOwnPropertyNames(myObj).forEach(function(val, idx, array) {
-        console.log( val + ' -> ' + myObj[val]);
-        text +=  '<li>' + val + ' -> ' + myObj[val] + "</li>\n";
-      });
-      $( "#wikistatistics" ).html(text);
-
-    }
-  })
-});    
-    
-/**
-      $(document).ready(function() {
-        var url = $( "#url" ).val();
-        var fullUrl = url +  apiQuery;
-        $.ajax({
-          url: fullUrl
-        })
-        .done(function( data ) {
-          if ( console && console.log ) {
-            console.log( "Sample of data:" +  data);
-          }
+      
+    </script>
+    <script>
+/** The Bootstrap typeahead feature and Civi REST interface
+    $(document).ready(function) {
+        $('input.typeahead').typeahead({
+            name: 'websites',
+            prefetch: '/civicrm/extern/rest.php?entity=GroupContact&action=get&group_id=2&options[limit]=10',
+            limit: 10
         });
-      });
-    
-    function makeQueryUrl (url, apiQuery) {
-      if ( (url == '') || (typeof url == 'undefined') ) {
-        url = $( "#url" ).val();
-      }
-      if ( (apiQuery == '') || (typeof apiQuery == 'undefined') ) {
-        apiQuery = '/api.php?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
-      }
-      return url + apiQuery;
     }
-
-    $( "#wr" ).submit(function( event ) {
-        var apiQuery = '/api.php?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
-        var fullUrl = $( "#url" ).val() + apiQuery;
-        $( "#wikigeneral" ).text( fullUrl ).show().fadeIn( 100 );
-        event.preventDefault();
-    });  
- */
+*/
+/** The Civi JavaScript API
+    CRM.api3('Website', 'get', {
+          "sequential": 1,
+          "website_type_id": "Work"
+        }).done(function(result) {
+          // do something
+        });
+*/
     </script>
 
   </body>

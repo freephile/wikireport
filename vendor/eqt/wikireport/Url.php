@@ -25,6 +25,17 @@ namespace eqt\wikireport;
 /**
  * Manipulate common URLs like "example.com" into actual complete URIs like
  * https://www.example.com/index.php
+ * 
+ * Here is an example of usage:
+ * 
+ $v = "example.org";
+ $obj = new \eqt\wikireport\Url($v);
+ $obj->validate_url();
+ $obj->find_redirect();
+ echo $obj->url;
+ echo $obj;
+ echo $obj->__toString();
+ * 
  */
 class Url {
     /**
@@ -61,7 +72,8 @@ class Url {
         $this->msg = array();
         $this->orginalUrl = $this->url = $url;
         $this->sanitize_url();
-        $this->prefix_scheme(); // make up for lazy web people
+        $this->find_redirect();
+        $this->url = $this->prefix_scheme(); // make up for lazy web people
         $this->parsedUrl = parse_url($this->url);
     }
     
@@ -78,15 +90,15 @@ class Url {
      * @return string 
      */
     function unparse_url() {
-        $scheme= isset($this->parsed_url['scheme']) ? $this->parsed_url['scheme'] . '://' : '';
-        $host  = isset($this->parsed_url['host'])   ? $this->parsed_url['host'] : '';
-        $port  = isset($this->parsed_url['port'])   ? ':' . $this->parsed_url['port'] : '';
-        $user  = isset($this->parsed_url['user'])   ? $this->parsed_url['user'] . ':' : '';
-        $pass  = isset($this->parsed_url['pass'])   ? $this->parsed_url['pass'] : '';
+        $scheme= isset($this->parsedUrl['scheme']) ? $this->parsedUrl['scheme'] . '://' : '';
+        $host  = isset($this->parsedUrl['host'])   ? $this->parsedUrl['host'] : '';
+        $port  = isset($this->parsedUrl['port'])   ? ':' . $this->parsedUrl['port'] : '';
+        $user  = isset($this->parsedUrl['user'])   ? $this->parsedUrl['user'] . ':' : '';
+        $pass  = isset($this->parsedUrl['pass'])   ? $this->parsedUrl['pass'] : '';
         $pass  = ($user || $pass) ? "$pass@" : ''; // not sure if you can have just user, but if so, then this will still append '@'
-        $path  = isset($this->parsed_url['path'])   ? $this->parsed_url['path'] : '';
-        $query = isset($this->parsed_url['query'])  ? '?' . $this->parsed_url['query'] : '';
-        $frag  = isset($this->parsed_url['fragment']) ? '#' . $this->parsed_url['fragment'] : '';
+        $path  = isset($this->parsedUrl['path'])   ? $this->parsedUrl['path'] : '';
+        $query = isset($this->parsedUrl['query'])  ? '?' . $this->parsedUrl['query'] : '';
+        $frag  = isset($this->parsedUrl['fragment']) ? '#' . $this->parsedUrl['fragment'] : '';
         return "$scheme$user$pass$host$port$path$query$frag";
     }
 
@@ -132,7 +144,9 @@ class Url {
             $url = $scheme . substr($url, 2);
             return $url;
         }
-        
+        if (parse_url($url, PHP_URL_SCHEME)) {
+            return $url;
+        }
         $this->msg[] = __METHOD__ . ": $url prefixed with $scheme";
         $url = $scheme . $url;
         return $url;
@@ -154,6 +168,11 @@ class Url {
                 // pickup the new target
                 $this->url = is_array($headers['Location'])? array_pop($headers['Location']) : $headers['Location'];
                 // for 302 (found) relative redirects, add back the host
+                if ( substr($this->url, 0, 2) == '//' ) {
+                    $this->url = $this->parsedUrl['scheme'] . '://' . 
+                                 $this->parsedUrl['host'] . 
+                                 $this->url;
+                }
                 if ( substr($this->url, 0, 1) == '/' ) {
                     $this->url = $this->parsedUrl['scheme'] . '://' . 
                                  $this->parsedUrl['host'] . 
