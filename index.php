@@ -53,10 +53,24 @@ if ( isset($_POST["submit"]) ) {
       $wurl    = new \eqt\wikireport\UrlWiki($url); 
 
       if ( $wurl->isWiki() ) {
+          //$format->pre_print($wurl);
+        // we've pre-fetched the basics.
+        // We can't get 'extensions' info on older wikis
+        $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general|statistics';
+        $versionString = $wurl->data['query']['general']['generator'];
+        $versionString = trim(str_ireplace("MediaWiki", '', $versionString));
+        // echo "The version is $versionString";
+        // I'm not sure when extensions become available, but they aren't in 1.12.0
+        if (version_compare($versionString, '1.13.0') >= 0) {
+            $apiQuery .= '|extensions';
+        }
+
         $MwApi  = new \eqt\wikireport\MwApi($wurl->apiUrl);
-        $MwApi->makeQuery();
+        $MwApi->makeQuery($apiQuery);
         $data = $MwApi->data;
-        // $format->pre_print($data);
+        
+
+         //$format->pre_print($data);
         // exit();
       } else {
         // bad url
@@ -75,6 +89,7 @@ if ( isset($_POST["submit"]) ) {
     // $version = $data['query']['general']['generator'];
     
     $data = json_decode($data, true);
+    
     $version = $data['query']['general']['generator'];
     $general = $data['query']['general'];
     $extensions = $data['query']['extensions'];

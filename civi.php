@@ -1,3 +1,11 @@
+<head>
+    <style>
+        .msg {
+            background-color:gray;
+            font-size:0.8em;
+        }
+    </style>
+</head>
 <?php
 
 /**
@@ -311,7 +319,7 @@ $id = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_URL);
 if ( (int) $id ) {
     echo $id;
 }
-*/  
+ 
     
 $params = array(
     'sequential' => 1,
@@ -327,3 +335,30 @@ foreach ($notes as $note) {
     //explodeNote($note);
     testNote($note, false);
 }
+
+*/ 
+
+function UrlWikiTest() {
+    $testData = array(
+       'ballotpedia.org',
+        // 'marvel.com',
+        // 'library.techguy.org',
+        //'https://wow.gamepedia.com/api.php',
+       //'wikitravel.org', some source doesn't include any discernable reference to MW, this case does show the login link
+       // 'http://wikitravel.org/wiki/en/api.php',
+       'freephile.org',
+    );
+    foreach ($testData as $k => $v) {
+        echo "<div>testing $k</div>\n";
+        $UrlWiki = new \eqt\wikireport\UrlWiki($v);
+        // $UrlWiki->find_redirect(); // http://wikitravel.org/en/Main_Page
+        $isWiki = $UrlWiki->isWiki();
+        echo "<div>$k is a wiki? ";
+        echo ($isWiki)? "TRUE": "FALSE";
+        echo "</div>\n";
+        echo "<pre class=\"msg\">\n";
+        var_dump($UrlWiki);
+        echo "\n</pre>\n";
+    }
+}
+ UrlWikiTest();

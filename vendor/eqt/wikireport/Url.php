@@ -72,9 +72,9 @@ class Url {
         $this->msg = array();
         $this->orginalUrl = $this->url = $url;
         $this->sanitize_url();
+        $this->url = $this->prefix_scheme(); // web form will have scheme
+        $this->parsedUrl = parse_url($this->url); // will be used by find-redirect, and re-called
         $this->find_redirect();
-        $this->url = $this->prefix_scheme(); // make up for lazy web people
-        $this->parsedUrl = parse_url($this->url);
     }
     
     /**
@@ -141,7 +141,7 @@ class Url {
         }
         if ( substr($url, 0, 2) == '//' ) {
             $this->mgs[] = __METHOD__ . ": $url used protocol relative '//', now using full $scheme";
-            $url = $scheme . substr($url, 2);
+            $url = $scheme . "://". substr($url, 2);
             return $url;
         }
         if (parse_url($url, PHP_URL_SCHEME)) {
@@ -167,18 +167,19 @@ class Url {
             if ( isset($headers['Location']) && !empty($headers['Location']) ) {
                 // pickup the new target
                 $this->url = is_array($headers['Location'])? array_pop($headers['Location']) : $headers['Location'];
-                // for 302 (found) relative redirects, add back the host
+                // for 302 (found) protocol relative redirects, add only the scheme
                 if ( substr($this->url, 0, 2) == '//' ) {
                     $this->url = $this->parsedUrl['scheme'] . '://' . 
-                                 $this->parsedUrl['host'] . 
                                  $this->url;
                 }
+                // for 302 (found) site relative redirects, add back the host
                 if ( substr($this->url, 0, 1) == '/' ) {
                     $this->url = $this->parsedUrl['scheme'] . '://' . 
                                  $this->parsedUrl['host'] . 
                                  $this->url;
                 }
                 //$this->msg[] = print_r($headers, 1);
+                $this->parsedUrl = parse_url($this->url);
                 $this->msg[] = __METHOD__ . ": $this->orginalUrl redirected to $this->url";
                 return true;
             }

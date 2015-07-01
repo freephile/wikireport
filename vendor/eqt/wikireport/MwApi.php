@@ -32,7 +32,7 @@ class mwApi {
      */
     var $endpoint;
     
-    var $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general|extensions|statistics';
+    var $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general|statistics';
     
     /**
      * the data returned from, or sent to the api
