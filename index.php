@@ -29,6 +29,7 @@ $ipWhitelist = array('50.177.140.82', '127.0.0.1');
 $url = filter_input(INPUT_GET, 'url', FILTER_SANITIZE_URL);
 
 if (isset($_POST["submit"])) {
+    require_once( __DIR__ . "/secret.php" );
     // Check if url has been entered
     $url = filter_input(INPUT_POST, 'url', FILTER_SANITIZE_URL);
     if (empty($url)) {
@@ -36,14 +37,13 @@ if (isset($_POST["submit"])) {
     }
 
     // Check if email has been entered and is valid
-    if (!filter_var($_POST['email'], FILTER_VALIDATE_EMAIL)) {
+    if ( !empty($_POST['email']) && !filter_var($_POST['email'], FILTER_VALIDATE_EMAIL) ) {
         $errEmail = 'Please enter a valid email address';
     }
 
     // do reCaptcha verification for anyone not from hq
     if (!in_array($_SERVER['REMOTE_ADDR'], $ipWhitelist)) {
-        require_once( __DIR__ . "secret.php" );
-        $recaptcha = new \ReCaptcha\ReCaptcha($secret);
+        $recaptcha = new \ReCaptcha\ReCaptcha($reCAPTCHAsecret);
         $resp = $recaptcha->verify($_POST['g-recaptcha-response'], $_SERVER['REMOTE_ADDR']);
         if ($resp->isSuccess()) {
             // verified! $human 
@@ -98,30 +98,66 @@ if (isset($_POST["submit"])) {
         }
         
         $result .= <<<HERE
-        <div class="alert alert-$fresh">You're running $version at <a href="$url" target="_blank">$url</a><br />
-        This is compared to {$MwApi->current_version} which was found running at $MwApi->current_url as of $MwApi->current_date
-        What's been <a href="https://git.wikimedia.org/blob/mediawiki%2Fcore.git/HEAD/HISTORY" target="_blank">added, fixed or changed</a>?</div>
+        <div class="alert alert-$fresh" role="alert">
+            <span class="glyphicon glyphicon-list-alt" aria-hidden="true"></span>
+        You're running $version at <a href="$url" target="_blank">$url</a><br />
+
+        This is compared to {$MwApi->current_version} which was found running at 
+        $MwApi->current_url as of $MwApi->current_date
+        
+        What's been <a href="https://git.wikimedia.org/blob/mediawiki%2Fcore.git/HEAD/HISTORY" 
+        target="_blank">added, fixed or changed</a>?
+        </div>
 HERE;
         
         // mail the report
-        $name = "Anonymous";
-        $email = $_POST['email'];
-        $sender = "eQuality Technology <info@eQuality-Tech.com>";
-        $to = $_POST['email'];
-        $bcc = "eQuality Technology <info@eQuality-Tech.com";
-        $subject = "Wiki Report for $MwApi->sitename ($MwApi->base).";
-        // $message = print_r($MwApi->arrayData, true);
-        $message = $result;
+        $mail = new PHPMailer;
+        $mail->isSMTP();                             // Set mailer to use SMTP
+        //Enable SMTP debugging
+        // 0 = off (for production use)
+        // 1 = client messages (commands)
+        // 2 = client and server messages (data and commands)
+        // 3 = plus connection status
+        // 4 = low-level data output
+        $mail->SMTPDebug = 0;
 
-        $headers =  "From: $sender" . "\r\n";
-        $headers .= "E-Mail: 'info@eQuality-Tech.com'" . "\r\n";
-        $headers .= "Bcc: $bcc" . "\r\n";
-       
-        $body = wordwrap($message, 70, "\r\n");
-        if (mail ($to, $subject, $body, $headers)) {
-            $result .= '<div class="alert alert-success">Report sent!</div>';
+        //Ask for HTML-friendly debug output
+        $mail->Debugoutput = 'html';
+
+        $mail->Host = 'smtp.gmail.com';              // Specify SMTP server(s)
+        $mail->SMTPAuth = true;                      // Enable SMTP authentication
+        $mail->Username = $gmailUser;                // SMTP username
+        $mail->Password = $gmailPassword;            // SMTP password
+        $mail->SMTPSecure = 'tls';                   // Enable TLS encryption
+        $mail->Port = 587;                           // TCP port to connect to
+        // Google rewrites this to the default set in your account
+        $mail->setFrom('info@eQuality-Tech.com', 'Wiki Report');
+        $mail->addAddress($email);                   // Add a recipient
+        $mail->addBCC('info@eQuality-Tech.com');
+
+        $mail->isHTML(true);                         // Set email format to HTML
+
+        $mail->Subject = "Wiki Report for $MwApi->sitename ($MwApi->base).";
+        $mail->Body = '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd">
+<html><body>';
+        $mail->Body    .= $result;
+        $mail->Body    .= '</body></html>';
+        $mail->AltBody = strip_tags($result);
+
+        if(!$mail->send()) {
+            $result .='<div class="alert alert-danger" role="alert">'
+                    . '<span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>'
+                    . '<span class="sr-only">Error:</span>'
+                    . 'Sorry there was an error sending your report. '
+                    . $mail->ErrorInfo
+                    . 'Please let us know at info@eQuality-Tech.com'
+                    . '</div>';
         } else {
-            $result .='<div class="alert alert-danger">Sorry there was an error sending your report. Please let us know at info@eQuality-Tech.com</div>';
+            $result .= '<div class="alert alert-success" role="alert">'
+                    . '<span class="glyphicon glyphicon-send" aria-hidden="true"></span>'
+                     // glyph is decoration only so no need for class="sr-only" span
+                    . ' Report sent!'
+                    . '</div>';
         }
 
         
@@ -130,13 +166,19 @@ HERE;
         
         if (isset($errUrl)) {
             $result = <<<HERE
-            <div class="alert alert-danger">We could not detect a wiki at <a href="$url" target="_blank">$url</a>
+            <div class="alert alert-danger" role="alert">
+                <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+                <span class="sr-only">Error: </span>
+                We could not detect a wiki at <a href="$url" target="_blank">$url</a>
             </div>
 HERE;
         }
         if (isset($errWikiPerm)) {
             $result .= <<<HERE
-            <div class="alert alert-danger">Wiki detected at <a href="$url" target="_blank">$url</a>, but we can't report on it.
+            <div class="alert alert-danger" role="alert">
+                <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+                <span class="sr-only">Error: </span>
+                Wiki detected at <a href="$url" target="_blank">$url</a>, but we can't report on it.
             </div>
 HERE;
         } 
@@ -162,6 +204,9 @@ HERE;
         <div class="container">
             <div class="row">
                 <div class="col-md-6 col-md-offset-3">
+<?php 
+include('navline.php'); 
+?>
                     <h1 class="page-header text-center">What's that wiki running?</h1>
                     <form id="wr" class="form-horizontal" role="form" method="post" action="">
                         <div class="form-group">
@@ -174,7 +219,8 @@ HERE;
                                                    return false" 
                                        onblur="if (this.value == 'http://') {
                                                    this.value = '';
-                                               } else
+                                               }
+                                               else
                                                    return false" />
 <?php if (isset($errUrl)) {
     echo "<p class='text-danger'>$errUrl</p>";
@@ -189,7 +235,7 @@ HERE;
                             <div class="col-sm-10 col-sm-offset-2"> 
                                 <label class="checkbox checkbox-success" for="general">
                                     <input type="checkbox" value="general" id="general" name="options[]" 
-<?php echo ($form->isChecked("options", "general")) ? 'checked="checked"' : '' ?>/>
+<?php echo ($form->isChecked("options", "general") || !$_POST['submit'] ) ? 'checked="checked"' : '' ?>/>
                                     Wiki Report
                                 </label>
                                 <label class="checkbox checkbox-success" for="extensions">
@@ -209,6 +255,7 @@ HERE;
                             <div class="col-sm-10">
                                 <input type="email" class="form-control" id="email" name="email" placeholder="you@example.com" 
                                        value="<?php echo htmlspecialchars($_POST['email']); ?>">
+                                <p class="help-block">Enter your email to receive a report. (not required)</p>
 <?php if (isset($errEmail)) {
     echo "<p class='text-danger'>$errEmail</p>";
 } ?>
@@ -226,7 +273,8 @@ HERE;
                         </div>
                         <div class="form-group">
                             <div class="col-sm-10 col-sm-offset-2">
-                                <input id="submit" name="submit" type="submit" value="Check wiki" class="btn btn-primary">
+                                <input id="submit" name="submit" type="submit" 
+                                       value="Check wiki" class="btn btn-primary" >
                             </div>
                         </div>
                         <div class="form-group">
@@ -364,6 +412,13 @@ HERE;
 
         </script>
         <script>
+    
+            $('#wr').submit(function(e) {
+               $('#url').val( $('#url').val().replace(/^(http:\/\/)https?:\/\//g, "$1", '') );               
+            });
+                                           
+                                       
+
             /** The Bootstrap typeahead feature and Civi REST interface
              $(document).ready(function) {
              $('input.typeahead').typeahead({

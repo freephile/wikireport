@@ -117,6 +117,7 @@ class MwApi2 {
             $query = $this->apiQuery;
         }
         $this->data = file_get_contents($this->endpoint . $query);
+        $this->arrayData = json_decode($this->data, true);
     }
     
     

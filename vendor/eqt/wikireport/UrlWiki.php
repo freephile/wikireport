@@ -29,6 +29,9 @@ namespace eqt\wikireport;
  * 
  * In so doing, it will also set the $apiUrl and $wikiUrl
  * 
+ * @todo rewrite the file_get_contents code to use fsockopen() and stream_get_meta_data()
+ * so that we can control how long we wait for bogus URLs
+ * 
  * usage example:
  * $UrlWiki = new \eqt\wikireport\UrlWiki($url);
  *
