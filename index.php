@@ -20,6 +20,11 @@
  */
 // composer libraries
 require __DIR__ . '/vendor/autoload.php';
+// our generic functions
+require __DIR__ . '/library.php';
+$err = array(); // our errors
+$result = '';
+$report = '';
 $form = new \eqt\wikireport\Form();
 // whitelist myself so I don't have to answer the captcha
 $ipWhitelist = array('50.177.140.82', '127.0.0.1');
@@ -29,36 +34,38 @@ $ipWhitelist = array('50.177.140.82', '127.0.0.1');
 $url = filter_input(INPUT_GET, 'url', FILTER_SANITIZE_URL);
 
 if (isset($_POST["submit"])) {
-    require_once( __DIR__ . "/secret.php" );
+
     // Check if url has been entered
     $url = filter_input(INPUT_POST, 'url', FILTER_SANITIZE_URL);
     if (empty($url)) {
-        $errUrl = 'Please enter the full location where your wiki is hosted (e.g. http://www.example.com/wiki)';
+        $err['Url'] = 'Please enter the full location where your wiki is hosted (e.g. http://www.example.com/wiki)';
     }
 
     // Check if email has been entered and is valid
-    if ( !empty($_POST['email']) && !filter_var($_POST['email'], FILTER_VALIDATE_EMAIL) ) {
-        $errEmail = 'Please enter a valid email address';
-    }
+    if ( !empty($_POST['email']) ) {
+        $email = filter_var($_POST['email'], FILTER_VALIDATE_EMAIL);
+        if (!$email ) {
+            $err['Email'] = 'Please enter a valid email address';
+        }
+    } 
 
     // do reCaptcha verification for anyone not from hq
     if (!in_array($_SERVER['REMOTE_ADDR'], $ipWhitelist)) {
+        require( __DIR__ . "/secret.php" );
         $recaptcha = new \ReCaptcha\ReCaptcha($reCAPTCHAsecret);
         $resp = $recaptcha->verify($_POST['g-recaptcha-response'], $_SERVER['REMOTE_ADDR']);
         if ($resp->isSuccess()) {
             // verified! $human 
         } else {
-            $errHuman = (string) $resp->getErrorCodes();
+            $err['Human'] = (string) $resp->getErrorCodes();
         }
     }
 
-    if (!isset($errUrl) && !isset($errHuman) && !isset($errEmail)) {
+    if ( !count($err) ) {
         // We're good to go, do processing
-
+        
         $data = '';
-        $format = new \eqt\wikireport\Format();
         $wurl = new \eqt\wikireport\UrlWiki($url);
-
         if ($wurl->isWiki()) {
             //$format->pre_print($wurl);
             // we've pre-fetched the basics.
@@ -74,114 +81,76 @@ if (isset($_POST["submit"])) {
 
             $MwApi = new \eqt\wikireport\MwApi2($wurl->apiUrl);
             $MwApi->makeQuery($apiQuery);
-            $data = $MwApi->data;
+            
             $fresh = $MwApi->getFreshness();
-            //$format->pre_print(print_r($MwApi->arrayData['query']['general'], true));
-            // $format->pre_print(print_r(get_object_vars($MwApi), true));
-            //$format->pre_print($data);
-            // exit();
-        } else {
-            // bad url
-            $errUrl = "No wiki found at that URL";
-        }
+            $data = $MwApi->arrayData;
 
-        $data = $MwApi->arrayData;
+            $version = $MwApi->generator;
 
-        $version = $MwApi->generator;
-        $general = $data['query']['general'];
-        $extensions = $data['query']['extensions'];
-        $statistics = $data['query']['statistics'];
+            $canonicalUrl = $MwApi->base;
+            if (empty($canonicalUrl)) {
+                $err['WikiPerm'] = "Unable to access basic info. (non-standard API endpoint; or permission problem)";
+            }
+            $result .= <<<HERE
+            <div class="alert alert-$fresh" role="alert">
+                <span class="glyphicon glyphicon-list-alt" aria-hidden="true"></span>
+            You're running $version at <a href="$url" target="_blank">$url</a><br />
 
-        $canonicalUrl = $MwApi->base;
-        if (empty($canonicalUrl)) {
-            $errWikiPerm = "Unable to access basic info. (non-standard API endpoint; or permission problem)";
-        }
-        
-        $result .= <<<HERE
-        <div class="alert alert-$fresh" role="alert">
-            <span class="glyphicon glyphicon-list-alt" aria-hidden="true"></span>
-        You're running $version at <a href="$url" target="_blank">$url</a><br />
+            This is compared to {$MwApi->current_version} which was found running at 
+            $MwApi->current_url as of $MwApi->current_date
 
-        This is compared to {$MwApi->current_version} which was found running at 
-        $MwApi->current_url as of $MwApi->current_date
-        
-        What's been <a href="https://git.wikimedia.org/blob/mediawiki%2Fcore.git/HEAD/HISTORY" 
-        target="_blank">added, fixed or changed</a>?
-        </div>
+            What's been <a href="https://git.wikimedia.org/blob/mediawiki%2Fcore.git/HEAD/HISTORY" 
+            target="_blank">added, fixed or changed</a>?
+            </div>
 HERE;
-        
-        // mail the report
-        $mail = new PHPMailer;
-        $mail->isSMTP();                             // Set mailer to use SMTP
-        //Enable SMTP debugging
-        // 0 = off (for production use)
-        // 1 = client messages (commands)
-        // 2 = client and server messages (data and commands)
-        // 3 = plus connection status
-        // 4 = low-level data output
-        $mail->SMTPDebug = 0;
+            
 
-        //Ask for HTML-friendly debug output
-        $mail->Debugoutput = 'html';
 
-        $mail->Host = 'smtp.gmail.com';              // Specify SMTP server(s)
-        $mail->SMTPAuth = true;                      // Enable SMTP authentication
-        $mail->Username = $gmailUser;                // SMTP username
-        $mail->Password = $gmailPassword;            // SMTP password
-        $mail->SMTPSecure = 'tls';                   // Enable TLS encryption
-        $mail->Port = 587;                           // TCP port to connect to
-        // Google rewrites this to the default set in your account
-        $mail->setFrom('info@eQuality-Tech.com', 'Wiki Report');
-        $mail->addAddress($email);                   // Add a recipient
-        $mail->addBCC('info@eQuality-Tech.com');
+            $options = array();
+            if (isset($_POST['options'])) {
+                $options = $_POST['options'];
+            }
 
-        $mail->isHTML(true);                         // Set email format to HTML
+            if (in_array('general', $options) || count($options) == 0) {
+                $report .= show_general_data_table($data['query']['general'], 'general', 'Wiki Report');
+            }
+            if (in_array('extensions', $options)) {
+                $report .= show_extensions_data_table($data['query']['extensions'], 'extensions', 'Extensions');
+            }
+            if (in_array('statistics', $options)) {
+                $report .= show_statistics_data_table($data['query']['statistics'], 'statistics', "Statistics");
+            }
 
-        $mail->Subject = "Wiki Report for $MwApi->sitename ($MwApi->base).";
-        $mail->Body = '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd">
-<html><body>';
-        $mail->Body    .= $result;
-        $mail->Body    .= '</body></html>';
-        $mail->AltBody = strip_tags($result);
 
-        if(!$mail->send()) {
-            $result .='<div class="alert alert-danger" role="alert">'
-                    . '<span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>'
-                    . '<span class="sr-only">Error:</span>'
-                    . 'Sorry there was an error sending your report. '
-                    . $mail->ErrorInfo
-                    . 'Please let us know at info@eQuality-Tech.com'
-                    . '</div>';
-        } else {
-            $result .= '<div class="alert alert-success" role="alert">'
+
+            // $sent = mail_report($result, $MwApi, $email);
+            $sent = true;
+            if ($email) {
+                if( $sent === true ) {
+                    $result .= '<div class="alert alert-success" role="alert">'
                     . '<span class="glyphicon glyphicon-send" aria-hidden="true"></span>'
                      // glyph is decoration only so no need for class="sr-only" span
                     . ' Report sent!'
                     . '</div>';
-        }
 
-        
+                } else {
+                    $result .='<div class="alert alert-danger" role="alert">'
+                    . '<span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>'
+                    . '<span class="sr-only">Error:</span>'
+                    . 'Sorry there was an error sending your report. '
+                    . $sent
+                    . 'Please let us know at info@eQuality-Tech.com'
+                    . '</div>';
+                }
+            }
+            
+        } else {
+            // bad url
+            $err['Url'] = "No wiki found at that URL";
+        }
     } else {
         // errors present in the submit, build error messages
-        
-        if (isset($errUrl)) {
-            $result = <<<HERE
-            <div class="alert alert-danger" role="alert">
-                <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-                <span class="sr-only">Error: </span>
-                We could not detect a wiki at <a href="$url" target="_blank">$url</a>
-            </div>
-HERE;
-        }
-        if (isset($errWikiPerm)) {
-            $result .= <<<HERE
-            <div class="alert alert-danger" role="alert">
-                <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-                <span class="sr-only">Error: </span>
-                Wiki detected at <a href="$url" target="_blank">$url</a>, but we can't report on it.
-            </div>
-HERE;
-        } 
+        populate_err_message($err, $url);
     }
 }
 ?>
@@ -222,11 +191,11 @@ include('navline.php');
                                                }
                                                else
                                                    return false" />
-<?php if (isset($errUrl)) {
-    echo "<p class='text-danger'>$errUrl</p>";
+<?php if (isset($err['Url'])) {
+    echo "<p class='text-danger'>{$err['Url']}</p>";
 } ?>
-<?php if (isset($errWikiPerm)) {
-    echo "<p class='text-danger'>$errWikiPerm</p>";
+<?php if (isset($err['WikiPerm'])) {
+    echo "<p class='text-danger'>{$err['WikiPerm']}</p>";
 } ?>
                             </div>
                         </div>
@@ -256,8 +225,8 @@ include('navline.php');
                                 <input type="email" class="form-control" id="email" name="email" placeholder="you@example.com" 
                                        value="<?php echo htmlspecialchars($_POST['email']); ?>">
                                 <p class="help-block">Enter your email to receive a report. (not required)</p>
-<?php if (isset($errEmail)) {
-    echo "<p class='text-danger'>$errEmail</p>";
+<?php if (isset($err['Email'])) {
+    echo "<p class='text-danger'>{$err['Email']}</p>";
 } ?>
                             </div>
                         </div>
@@ -266,8 +235,8 @@ include('navline.php');
                             <div class="col-sm-10">
                                 <div class="g-recaptcha" data-sitekey="6LcjPwgTAAAAACwnvsybTIDSyvsNs0EkbxFkb-qw"></div>
                                 <input type="hidden" class="form-control" id="human" name="human" placeholder="Not a bot">
-<?php if (isset($errHuman)) {
-    echo "<p class='text-danger'>$errHuman</p>";
+<?php if (isset($err['Human'])) {
+    echo "<p class='text-danger'>{$err['Human']}</p>";
 } ?>
                             </div>
                         </div>
@@ -279,164 +248,24 @@ include('navline.php');
                         </div>
                         <div class="form-group">
                             <div class="col-sm-10 col-sm-offset-2">
-<?php if (isset($result)) {
+<?php 
+if (isset($result)) {
     echo $result;
-} ?>  
+}
+?>  
                             </div>
                         </div>
                     </form> 
                 </div>
             </div>
-            
+<?php 
+if (isset($report)) {
+    echo $report;
+}
+?>              
         </div>
-        <div id="footer">
-            <div class="container">
-                <p class="muted credit">courtesy <a href="https://eQuality-Tech.com">eQuality Technology</a> and <a href="https://linkedin.com/in/freephile/">Greg Rundlett</a></p>
-            </div>
-        </div>
-        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
-        <script src="https://freephile.org/wikireport/vendor/jquery-number/jquery.number.js"></script>
-        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
-        <?php
-        if (isset($_POST['submit'])) {
-
-            $options = array();
-            if (isset($_POST['options'])) {
-                $options = $_POST['options'];
-            }
-
-            if (in_array('general', $options) || count($options) == 0) {
-                $tabledata = (array) $general;
-                echo <<<HERE
-      <div class="col-md-6 col-md-offset-3">
-      <h2>Wiki Report</h2>
-      <div class="table-responsive">
-        <table id="wiki-general-table" class="table table-striped table-condensed table-bordered table-hover">
-          <thead>
-          <tr><th>Item</th><th>Value</th></tr>
-          </thead>
-          <tbody>
-HERE;
-                foreach ($tabledata as $k => $v) {
-                    $format->linkify($v);
-                    $v = $format->implode($v); // avoid array to string conversion and no output
-                    echo "<tr><th>$k</th><td>$v</td></tr>";
-                }
-                echo "</tbody>
-        </table>
-      </div>
-      </div>";
-            }
-            if (in_array('extensions', $options)) {
-                $tabledata = (array) $extensions;
-                $extensions_count = count($tabledata);
-                echo <<<HERE
-      <div class="col-md-6 col-md-offset-3">
-      <h2>Extensions</h2>
-HERE;
-                foreach ($tabledata as $k => $v) {
-                    echo <<<HERE
-        <div class="table-responsive">
-          <table id="wiki-extensions-table-$k" class="table table-striped table-condensed table-bordered table-hover">
-            <thead>
-            <tr><th colspan="2" class="text-center">{$v["name"]}</th></tr>
-            </thead>
-            <tbody>
-HERE;
-                    foreach ($v as $key => $value) {
-                        if ((strlen($value)) && ($key != 'name')) {
-                            $format->linkify($value);
-                            $value = $format->implode($value);
-                            echo "<tr><th>$key</th><td>$value</td></tr>";
-                        }
-                    }
-                    echo "</tbody>
-        </table>
-      </div>";
-                }
-                echo "
-      </div>";
-            }
-            if (in_array('statistics', $options)) {
-                $tabledata = (array) $statistics;
-                $headings = array_keys($tabledata);
-                $len = count($tabledata);
-                $values = array_values($tabledata);
-                echo <<<HERE
-      <h2>Statistics</h2>
-      <div class="table-responsive">
-        <table id="wiki-statistics-table" class="table table-striped table-condensed table-bordered table-hover">
-          <thead>
-          <tr>
-HERE;
-                for ($i = 0; $i < $len; $i++) {
-                    echo "<th>$headings[$i]</th>";
-                }
-
-                echo "</tr></thead>
-        <tbody>";
-                echo "\n<tr>";
-                for ($i = 0; $i < $len; $i++) {
-                    echo "<td class=\"number\">$values[$i]</td>";
-                }
-                echo "</tr>";
-                echo "</tbody>
-        </table>
-      </div>";
-            }
-        }// end if $POST
-        ?>
-        <script>
-           // format any class="number" element
-           // we're using a jQuery plugin, but could use regular JavaScript
-           // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/NumberFormat/format
-           $(".number").number(true, 0);
-
-           // add Google Analytics
-           // UA-39339059-2
-
-           (function (i, s, o, g, r, a, m) {
-               i['GoogleAnalyticsObject'] = r;
-               i[r] = i[r] || function () {
-                   (i[r].q = i[r].q || []).push(arguments)
-               }, i[r].l = 1 * new Date();
-               a = s.createElement(o),
-                       m = s.getElementsByTagName(o)[0];
-               a.async = 1;
-               a.src = g;
-               m.parentNode.insertBefore(a, m)
-           })(window, document, 'script', '//www.google-analytics.com/analytics.js', 'ga');
-
-           ga('create', 'UA-39339059-2', 'auto');
-           ga('send', 'pageview');
-
-        </script>
-        <script>
-    
-            $('#wr').submit(function(e) {
-               $('#url').val( $('#url').val().replace(/^(http:\/\/)https?:\/\//g, "$1", '') );               
-            });
-                                           
-                                       
-
-            /** The Bootstrap typeahead feature and Civi REST interface
-             $(document).ready(function) {
-             $('input.typeahead').typeahead({
-             name: 'websites',
-             prefetch: '/civicrm/extern/rest.php?entity=GroupContact&action=get&group_id=2&options[limit]=10',
-             limit: 10
-             });
-             }
-             */
-            /** The Civi JavaScript API
-             CRM.api3('Website', 'get', {
-             "sequential": 1,
-             "website_type_id": "Work"
-             }).done(function(result) {
-             // do something
-             });
-             */
-        </script>
-
+<?php
+include('footer.php');
+?>
     </body>
 </html>
