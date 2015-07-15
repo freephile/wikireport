@@ -32,7 +32,7 @@
     <div class="container">
         <div class="row">
             <div class="col-md-6 col-md-offset-3">
-                <p class="muted credit"><a href="https://github.com/freephile/wikireport" class="rotator">&copy; </a> 2015 <a href="https://eQuality-Tech.com">eQuality Technology</a> and <a href="https://linkedin.com/in/freephile/">Greg Rundlett</a></p>
+                <p class="muted credit"><a href="https://github.com/freephile/wikireport" class="rotator" title="copyleft AGPLv3">&copy; </a>ourtesy 2015 <a href="https://eQuality-Tech.com">eQuality Technology</a> and <a href="https://linkedin.com/in/freephile/">Greg Rundlett</a></p>
             </div>
         </div>
     </div>

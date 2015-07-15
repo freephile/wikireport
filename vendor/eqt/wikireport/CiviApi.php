@@ -103,11 +103,51 @@ class CiviApi {
         // These assignments may not be valid bc array shape changes w chained
         // API calls (and different entities?)
         $this->is_error = $result['is_error'];
-        $this->version = $result['version'];
-        $this->count = $result['count'];
-        $this->id = $result['id'];
-        $this->values = $result['values'];
-        $this->msg[] = __METHOD__ . " called on $entity with action $action, returning $this->id.";
+        $this->version  = $result['version'];
+        $this->count    = $result['count'];
+        $this->id       = $result['id'];
+        $this->values   = $result['values'];
+        $this->msg[]    = __METHOD__ . " called on $entity with action $action, returning $this->id.";
         return $result;
     }
+    
+    
+    function getWebsite($url, $fuzzy=false) {
+        $params = array(
+            'sequential' => 1,
+        );
+        if ($fuzzy) {
+            $params2 = array ('url' => array('LIKE' => "%$url%"));
+        } else {
+            $params2 = array ('url' => $url);            
+        }
+        $params = $params + $params2; // array union
+
+        $result = $this->makeCall('website', 'get' ,$params);
+        if ($result['is_error']) {
+            echo "Error finding website for $url";
+            return false;
+        }
+        return $result;
+    }
+
+    /**
+     * A convenience function for creating or updating a Website entity in CiviCRM
+     * As long as $params contains an 'id', then it will update the existing record.
+     * 'contact_id' must be included in $params because all website records are 
+     * associated to another contact entity.
+     * 
+     * @param array $params
+     * @return array the array is passed back to the caller.
+     */
+    function createWebsiteRecord($params) {
+        if ( !in_array('contact_id', array_keys($params)) ) {
+            die ("You can not create a Website record without a 'contact_id'");
+        }
+        $result = $this->makeCall('website', 'create' ,$params);
+        return $result;
+    }
+
+    
+    
 }

@@ -42,7 +42,7 @@ class UrlWiki extends \eqt\wikireport\Url {
     
     public $url;
     
-    public $wikiUrl;
+    public $wikiUrl; // base
     
     public $sitename; // from json data
     
@@ -58,7 +58,69 @@ class UrlWiki extends \eqt\wikireport\Url {
     
     public $data;
     
+    public $versionString;
 
+    
+    /** a function to take a URL, and find the api endpoint using available heuristics
+     * We return true unless we can NOT connect.  Thus, a weak guess is still 'true'
+     * @param type $url
+     */
+    function find_endpoint($url = null) {
+        if ( is_null($url) ) {
+            $url = $this->url;
+        }
+        $this->msg[] = "finding an endpoint for $url";
+        if ( substr($url, -7) == 'api.php' ) {
+            $this->msg[] = "given a URL ending with api.php, so using that for \$this->apiUrl";
+            $this->apiUrl = $url;
+            return true;
+        } else {
+            // we only redirect if starting off without an endpoint (api.php)
+            $this->find_redirect();
+            
+            $data = file_get_contents($this->url);
+            
+            switch ($data) {
+                // short-circuit if we can't even connect to $this->url    
+                case ($data === false) :
+                    $this->msg[] = __METHOD__ . ": Unable to connect to $this->url (bad URL?)";
+                    return false;
+                // As of v1.17 The API now has a Really Simple Discovery module, 
+                // useful for publishing service information by the API. 
+                // The RSD link looks like
+                // <link rel="EditURI" type="application/rsd+xml" href="https://freephile.org/w/api.php?action=rsd" />
+                // <link rel="EditURI" type="application/rsd+xml" href="//en.wikipedia.org/w/api.php?action=rsd" />
+                // if ( preg_match( '#<link rel="EditURI" type="application/rsd\+xml" href="(.*)\?action=rsd"#', $data, $matches) ) {
+                case ( preg_match('#EditURI.* href\="(.*)\?action\=rsd"#U', $data, $matches) && $matches[1] ):
+                    $this->apiUrl = $matches[1];
+                    $this->prefix_scheme($this->parsedUrl['scheme'], $this->apiUrl);
+                    $this->msg[] = __METHOD__ . " setting apiUrl ($this->apiUrl) from EditURI/Really Simple Discovery";
+                    break;
+                
+                // Find api.php from the RSS feed link (accurate)
+                case ( preg_match('#link rel="alternate" type="application/(?:rss|atom)[^>]* href="(.*)\?title=#U', $data, $matches) && $matches[1] ):
+                    $this->apiUrl = str_ireplace('index.php', 'api.php', $matches[1]);
+                    $this->make_absolute($this->apiUrl);
+                    $this->msg[] = __METHOD__ . " setting apiUrl ($this->apiUrl) from RSS link";
+                    break;
+
+                // older versions of MediaWiki don't have a EditURI link, but 
+                // do have the "generator" link so, if we detect that, then we'll
+                // <meta name="generator" content="MediaWiki 1.15.1" />
+                // <meta name="generator" content="MediaWiki 1.16.5" />
+                case ( preg_match('#meta name="generator"[^>]* content="(MediaWiki[^"]+)"#U', $data, $matches) && $matches[1] ):
+                    $this->guess_api();
+                    $this->msg[] = __METHOD__ . " found generator, guessing api ($this->apiUrl)";
+                    break;
+
+                default:
+                    $this->guess_api();
+                    $this->msg[] = __METHOD__ . ": We guessed at $this->apiUrl (given $this->url)";
+            }
+            return true;
+        }
+
+    }
     /**
      * getter/setter for $this->isWiki
      * 
@@ -71,88 +133,50 @@ class UrlWiki extends \eqt\wikireport\Url {
         $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
         
         if( isset($this->isWiki) ) {
+            $this->msg[] = "isWiki was already set.  Returning $this->isWiki.";
             return $this->isWiki;
         }
-            
-        if ( substr($this->url, -7) == 'api.php' ) {
+        if ( $this->find_endpoint() ) {
             $this->isWiki = true;
-            $this->apiUrl = $this->url;
-            $json = file_get_contents($this->apiUrl . $apiQuery);
-        } else {
-            // we only redirect if starting off without an endpoint (api.php)
-            $this->find_redirect();
-            
-            $data = file_get_contents($this->url);
-            
-            switch ($data) {
-                // short-circuit if we can't even connect to $this->url    
-                case ($data === false) :
-                    $this->isWiki = false;
-                    $this->msg[] = __METHOD__ . ": Unable to connect to $this->url (bad URL?)";
-                    return false;
-
-                // As of v1.17 The API now has a Really Simple Discovery module, 
-                // useful for publishing service information by the API. 
-                // The RSD link looks like
-                // <link rel="EditURI" type="application/rsd+xml" href="https://freephile.org/w/api.php?action=rsd" />
-                // <link rel="EditURI" type="application/rsd+xml" href="//en.wikipedia.org/w/api.php?action=rsd" />
-                // if ( preg_match( '#<link rel="EditURI" type="application/rsd\+xml" href="(.*)\?action=rsd"#', $data, $matches) ) {
-                case ( preg_match('#EditURI.* href\="(.*)\?action\=rsd"#U', $data, $matches) && $matches[1] ):
-                    $this->isWiki = true;
-                    $this->apiUrl = $matches[1];
-                    $this->prefix_scheme($this->parsedUrl['scheme'], $this->apiUrl);
-                    $this->msg[] = __METHOD__ . "setting apiURL from EditURI/Really Simple Discovery";
-                    break;
-                
-                // Find api.php from the RSS feed link (accurate)
-                case ( preg_match('#link rel="alternate" type="application/rss[^>]* href="(.*)\?title=#U', $data, $matches) && $matches[1] ):
-                    $this->isWiki = true;
-                    $this->apiUrl = str_ireplace('index.php', 'api.php', $matches[1]);
-                    $this->msg[] = __METHOD__ . "setting apiURL from RSS link";
-                    break;
-
-                // older versions of MediaWiki don't have a EditURI link, but 
-                // do have the "generator" link so, if we detect that, then we'll
-                // <meta name="generator" content="MediaWiki 1.15.1" />
-                // <meta name="generator" content="MediaWiki 1.16.5" />
-                case ( preg_match('#meta name="generator"[^>]* content="MediaWiki#U', $data, $matches) && $matches[1] ):
-                    $this->isWiki = true;
-                    $apiUrl = $this->parsedUrl['scheme'] . '://';
-                    $apiUrl .= $this->parsedUrl['host'];
-                    $apiUrl .= isset($this->parsedUrl['port'])? ':' . $this->parsedUrl['port'] : '';
-                    // if the path contains 'index.php', grab the portion before that; eg. wiki/index.php.
-                    if (strstr($this->parsedUrl['path'], 'index.php')) { 
-                        $apiUrl .= substr($this->parsedUrl['path'], 0, 
-                                strpos($this->parsedUrl['path'], 'index.php'));
-                    } elseif (strstr($this->parsedUrl['path'], 'wiki')) { 
-                    // clean URLs with 'wiki' (no index.php), grab the portion before that (probably just a slash)
-                        $apiUrl .= substr($this->parsedUrl['path'], 0, 
-                                strpos($this->parsedUrl['path'], 'wiki'));
-                        $apiUrl .= 'wiki/'; // add back the 'wiki' portion
-                    }
-                    $apiUrl .= "api.php";
-                    $this->apiUrl = $apiUrl;
-                    $this->msg[] = __METHOD__ . "setting apiURL from generator";
-                    break;
-
-                default:
-                    $this->isWiki = false;
-                    $this->apiUrl = $this->url;
-                    $this->msg[] = __METHOD__ . ": No wiki found at $this->apiUrl (given $this->url)";
-                    return false;
-            }
-            $json = file_get_contents($this->apiUrl . $apiQuery);
         }
-        
+        $url = $this->apiUrl . $apiQuery;
+        $json = file_get_contents($url);
+        // echo "<pre>"; var_dump($json); echo "</pre>";
         $this->data = json_decode($json, true);
+        // echo "<pre>"; var_dump($this->data); echo "</pre>";
+        if ( $this->data['error']) {
+            // echo "<pre>"; var_dump($this->data); echo "</pre>";
+            $this->msg[] = __METHOD__ . " although a wiki, we're returning false because of code {$this->data['error']['code']} meaning {$this->data['error']['info']}";
+            $this->isWiki = false;
+            return false;
+        }
         $this->wikiUrl = $this->data['query']['general']['base'];
         $this->sitename = $this->data['query']['general']['sitename'];
         $this->generator = $this->data['query']['general']['generator'];
+        $this->versionString =  trim(str_ireplace("MediaWiki", '', $this->generator));
+
         $this->msg[] = __METHOD__ . ": wiki found at $this->wikiUrl via $this->apiUrl (starting with $this->orginalUrl)";
 
         return $this->isWiki;
     }
     
+    function guess_api() {
+        $apiUrl = $this->parsedUrl['scheme'] . '://';
+        $apiUrl .= $this->parsedUrl['host'];
+        $apiUrl .= isset($this->parsedUrl['port'])? ':' . $this->parsedUrl['port'] : '';
+        // if the path contains 'index.php', grab the portion before that; eg. wiki/index.php.
+        if (strstr($this->parsedUrl['path'], 'index.php')) { 
+            $apiUrl .= substr($this->parsedUrl['path'], 0, 
+                    strpos($this->parsedUrl['path'], 'index.php'));
+        } elseif (strstr($this->parsedUrl['path'], 'wiki')) { 
+        // clean URLs with 'wiki' (no index.php), grab the portion before that (probably just a slash)
+            $apiUrl .= substr($this->parsedUrl['path'], 0, 
+                    strpos($this->parsedUrl['path'], 'wiki'));
+            $apiUrl .= 'w'; // add back the 'wiki' portion
+        }
+        $apiUrl .= "/api.php";
+        $this->apiUrl = $apiUrl;
+        return $apiUrl;
+    }   
 
 }
-

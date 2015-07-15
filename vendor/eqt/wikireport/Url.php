@@ -186,6 +186,15 @@ class Url {
         }
         return false;
     }
+    
+    function make_absolute( &$url ) {
+        if ( substr($url, 0, 4) == 'http' || stristr($url, $this->parsedUrl['host']) ) {
+            return true;
+        }
+        $url = $this->parsedUrl['scheme'] . '://' . 
+               $this->parsedUrl['host'] . $url;
+        return true;
+    }
 
     /**
      * Using filter_var(), we make sure that our url is not dangerous (exploit)

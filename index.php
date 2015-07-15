@@ -33,7 +33,7 @@ $ipWhitelist = array('50.177.140.82', '127.0.0.1');
 // FILTER_VALIDATE_URL will not work with non-ascii domains, but we're only in the U.S.
 $url = filter_input(INPUT_GET, 'url', FILTER_SANITIZE_URL);
 
-if (isset($_POST["submit"])) {
+if ( isset($_POST) && ! empty($_POST) ) {
 
     // Check if url has been entered
     $url = filter_input(INPUT_POST, 'url', FILTER_SANITIZE_URL);
@@ -67,29 +67,27 @@ if (isset($_POST["submit"])) {
         $data = '';
         $wurl = new \eqt\wikireport\UrlWiki($url);
         if ($wurl->isWiki()) {
-            //$format->pre_print($wurl);
-            // we've pre-fetched the basics.
-            // We can't get 'extensions' info on older wikis
-            $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general|statistics';
-            $versionString = $wurl->data['query']['general']['generator'];
-            $versionString = trim(str_ireplace("MediaWiki", '', $versionString));
-            // echo "The version is $versionString";
+            $MwApi = new \eqt\wikireport\MwApi($wurl->apiUrl);
+            $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
+            if (version_compare($wurl->versionString, '1.10.0') >= 0) {
+                $apiQuery .= '|statistics';
+            }
             // extensions become available in 1.16
-            if (version_compare($versionString, '1.16.0') >= 0) {
+            if (version_compare($wurl->versionString, '1.16.0') >= 0) {
                 $apiQuery .= '|extensions';
             }
-
-            $MwApi = new \eqt\wikireport\MwApi2($wurl->apiUrl);
             $MwApi->makeQuery($apiQuery);
-            
+            $data = $MwApi->data;
             $fresh = $MwApi->getFreshness();
-            $data = $MwApi->arrayData;
+
+            // print "<pre>"; var_dump($data); print "</pre>\n";
 
             $version = $MwApi->generator;
-
+// echo $MwApi->base;
             $canonicalUrl = $MwApi->base;
             if (empty($canonicalUrl)) {
                 $err['WikiPerm'] = "Unable to access basic info. (non-standard API endpoint; or permission problem)";
+                $err['WikiPerm'] .= "You can try to access $wurl->apiUrl{$apiQuery}";
             }
             $result .= <<<HERE
             <div class="alert alert-$fresh" role="alert">
@@ -103,8 +101,6 @@ if (isset($_POST["submit"])) {
             target="_blank">added, fixed or changed</a>?
             </div>
 HERE;
-            
-
 
             $options = array();
             if (isset($_POST['options'])) {
@@ -120,8 +116,6 @@ HERE;
             if (in_array('statistics', $options)) {
                 $report .= show_statistics_data_table($data['query']['statistics'], 'statistics', "Statistics");
             }
-
-
 
             // $sent = mail_report($result, $MwApi, $email);
             $sent = true;
@@ -146,7 +140,11 @@ HERE;
             
         } else {
             // bad url
-            $err['Url'] = "No wiki found at that URL";
+            if ($wurl->apiUrl) {
+                $err['Url'] = "Error: {$wurl->data['error']['code']} Info: {$wurl->data['error']['info']}";
+            } else {
+                $err['Url'] = "No wiki found at that URL";
+            }
         }
     } else {
         // errors present in the submit, build error messages
@@ -204,7 +202,7 @@ include('navline.php');
                             <div class="col-sm-10 col-sm-offset-2"> 
                                 <label class="checkbox checkbox-success" for="general">
                                     <input type="checkbox" value="general" id="general" name="options[]" 
-<?php echo ($form->isChecked("options", "general") || !$_POST['submit'] ) ? 'checked="checked"' : '' ?>/>
+<?php echo ($form->isChecked("options", "general") || !$_POST ) ? 'checked="checked"' : '' ?>/>
                                     Wiki Report
                                 </label>
                                 <label class="checkbox checkbox-success" for="extensions">
@@ -223,7 +221,7 @@ include('navline.php');
                             <label for="email" class="col-sm-2 control-label">Email</label>
                             <div class="col-sm-10">
                                 <input type="email" class="form-control" id="email" name="email" placeholder="you@example.com" 
-                                       value="<?php echo htmlspecialchars($_POST['email']); ?>">
+                                       value="<?php if($_POST) {echo htmlspecialchars($email);} ?>">
                                 <p class="help-block">Enter your email to receive a report. (not required)</p>
 <?php if (isset($err['Email'])) {
     echo "<p class='text-danger'>{$err['Email']}</p>";

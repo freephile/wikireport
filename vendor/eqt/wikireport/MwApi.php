@@ -25,27 +25,22 @@ namespace eqt\wikireport;
  *
  * @author greg
  */
-class MwApi2 {
+class MwApi {
     /**
      * The API endpoint to communicate with
      * @var string
      */
     var $endpoint;
-    
-    var $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general|statistics';
+    // versions before 1.10.0 will not support siprop |statistics 
+    var $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
     
     /**
-     * the JSON data returned from, or sent to the api
-     * @var mixed
+     * the decoded (array) data returned from, or sent to the api
+     * json is only used over the wire
+     * @var array $data
      */
     var $data;
-    
-    /**
-     * JSON data converted to array
-     * @var array  
-     */
-    var $arrayData;
-    
+        
     /**
      * Instead of a string like "MediaWiki 1.26.wmf"
      * We'll use just the "1.26.wmf" as a version "number" to compare with
@@ -102,24 +97,48 @@ class MwApi2 {
     public function __construct($endpoint) {
         $this->endpoint = $endpoint;
         $this->makeQuery();
-        $this->arrayData = json_decode($this->data, true);
         //populate all our variables, not using magic methods
         foreach (get_object_vars($this) as $prop => $val) {
-            if (array_key_exists($prop, $this->arrayData['query']['general'])) {
-                $this->$prop = $this->arrayData['query']['general'][$prop];
+            if (array_key_exists($prop, $this->data['query']['general'])) {
+                $this->$prop = $this->data['query']['general'][$prop];
             }
         }
         $this->versionString = trim(str_ireplace("MediaWiki", '', $this->generator));
     }
-    
+    /**
+     * We could redo this function so that it returns the query response
+     * instead of populating a neverending series of parameters.
+     * @param type $query
+     */
     function makeQuery($query='') {
         if ($query == '') {
             $query = $this->apiQuery;
         }
-        $this->data = file_get_contents($this->endpoint . $query);
-        $this->arrayData = json_decode($this->data, true);
+        $data = json_decode(file_get_contents($this->endpoint . $query), true);
+        $this->data = $data;
+        return $data;
     }
     
+    function getStats () {
+        $query = '?action=query&meta=siteinfo&format=json&siprop=statistics';
+        $data = json_decode(file_get_contents($this->endpoint . $query), true);
+        $this->data['query']['statistics'] = $data['query']['statistics'];
+        return $data;
+    }
+    
+    function getGeneral () {
+        $query = '?action=query&meta=siteinfo&format=json&siprop=general';
+        $data = json_decode(file_get_contents($this->endpoint . $query), true);
+        $this->data['query']['general'] = $data['query']['general'];
+        return $data;
+    }
+    
+    function getExtensions () {
+        $query = '?action=query&meta=siteinfo&format=json&siprop=extensions';
+        $data = json_decode(file_get_contents($this->endpoint . $query), true);
+        $this->data['query']['extensions'] = $data['query']['extensions'];
+        return $data;
+    }
     
     /**
      * Find out how recent this wiki is compared to MediaWiki releases

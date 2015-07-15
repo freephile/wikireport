@@ -63,7 +63,7 @@ include('navline.php');
     $i = 0;
     foreach ($websites as $site) {
         $i++;
-        echo "<tr><th>$i.</th><td><a href=\"index.php?url={$site['url']}\" target=\"_blank\">{$site['url']}</td></tr>\n";
+        echo "<tr><th>$i.</th><td><a href=\"index.php?url={$site['url']}\" target=\"_blank\">{$site['url']}</a></td></tr>\n";
     }
 ?>
                     </tbody>
@@ -76,12 +76,15 @@ include('navline.php');
                     <tr><th>#</th><th>Wiki</th></tr>
                     </thead>
                     <tbody>
+-->
 <?php
     $params = array(
         'sequential' => 1,
         'website_type_id' => "wiki",
         'options' => array('limit' => 25),
         'url' => array('IS NULL' => 1),
+        // chain another API call
+        'api.Contact.get' => array(),
     );
     $CiviApi = new \eqt\wikireport\CiviApi();
     $result = $CiviApi->makeCall('Website', 'get', $params);
@@ -90,9 +93,12 @@ include('navline.php');
     $i = 0;
     foreach ($websites as $site) {
         $i++;
-        echo "<tr><th>$i.</th><td><a href=\"index.php?url={$site['url']}\" target=\"_blank\">{$site['url']}</td></tr>\n";
+        // echo "<tr><th>$i.</th><td><a href=\"index.php?url={$site['url']}\" target=\"_blank\">{$site['url']}</a></td></tr>\n";
+        
+        //echo "<li>$i. <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid={$site['contact_id']}\"> {$site['contact_id']} ({$site['url']}) </a>  </li> \n";
     }
 ?>
+<!-- 
                     </tbody>
                 </table>
             </div>
