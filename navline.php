@@ -5,6 +5,9 @@ function activate($uri) {
         echo ' class="active" ';
     }
 }
+$Profiler = new \eqt\wikireport\Profiler();
+$Profiler->start();
+$Profiler->stopwatch();
 
 ?>
 

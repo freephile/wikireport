@@ -59,11 +59,28 @@ class UrlWiki extends \eqt\wikireport\Url {
     public $data;
     
     public $versionString;
-
     
-    /** a function to take a URL, and find the api endpoint using available heuristics
+    public $error; // an integer that corresponds to the Civi Group (11 = Perms/No API)
+
+    function __construct($url) {
+        parent::__construct($url);
+        $timer = new \eqt\wikireport\Profiler();
+        $timer->stopwatch();
+        $this->find_endpoint();
+        $timer->stopwatch();
+        $this->msg[] = $timer->getElapsedTime( __METHOD__ . " took ", "on line ". __LINE__, false);
+    }
+
+    /** 
+     * A function to take a URL, and find the api endpoint using available heuristics.
      * We return true unless we can NOT connect.  Thus, a weak guess is still 'true'
-     * @param type $url
+     * The side-effect of this method is that $this->apiUrl is set.
+     * Once $this->apiUrl is set, we can actually determine if it's a wiki and
+     * more importantly, we can pass it over to MwApi() to handle API calls.
+     * 
+     * @param optional string $url is the full URI of the MediaWiki api.php
+     * If any URI produced by a MediaWiki installation is given, we will do our best
+     * to determine what the URI of api.php is.
      */
     function find_endpoint($url = null) {
         if ( is_null($url) ) {
@@ -77,9 +94,7 @@ class UrlWiki extends \eqt\wikireport\Url {
         } else {
             // we only redirect if starting off without an endpoint (api.php)
             $this->find_redirect();
-            
-            $data = file_get_contents($this->url);
-            
+            $data = $this->curl_get($this->url);
             switch ($data) {
                 // short-circuit if we can't even connect to $this->url    
                 case ($data === false) :
@@ -140,13 +155,21 @@ class UrlWiki extends \eqt\wikireport\Url {
             $this->isWiki = true;
         }
         $url = $this->apiUrl . $apiQuery;
-        $json = file_get_contents($url);
+        $json = $this->curl_get($url);
+        if ( strstr($json, 'wgEnableAPI') ) {
+            // we don't have json, we have an error message that the API is not enabled
+            $this->msg[] = __METHOD__ . " although a wiki, we're returning false because the API is not enabled. (try Special:Version)";
+            $this->error = 11;
+            $this->isWiki = false;
+            return false;
+        }
         // echo "<pre>"; var_dump($json); echo "</pre>";
         $this->data = json_decode($json, true);
         // echo "<pre>"; var_dump($this->data); echo "</pre>";
-        if ( $this->data['error']) {
+        if ( isset($this->data['error']) && !empty($this->data['error']) ) {
             // echo "<pre>"; var_dump($this->data); echo "</pre>";
             $this->msg[] = __METHOD__ . " although a wiki, we're returning false because of code {$this->data['error']['code']} meaning {$this->data['error']['info']}";
+            $this->error = 11;
             $this->isWiki = false;
             return false;
         }

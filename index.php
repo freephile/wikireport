@@ -94,8 +94,8 @@ if ( isset($_POST) && ! empty($_POST) ) {
                 <span class="glyphicon glyphicon-list-alt" aria-hidden="true"></span>
             You're running $version at <a href="$url" target="_blank">$url</a><br />
 
-            This is compared to {$MwApi->current_version} which was found running at 
-            $MwApi->current_url as of $MwApi->current_date
+            This is compared to {$MwApi->reference_version} which was found running at 
+            $MwApi->reference_url as of $MwApi->reference_date
 
             What's been <a href="https://git.wikimedia.org/blob/mediawiki%2Fcore.git/HEAD/HISTORY" 
             target="_blank">added, fixed or changed</a>?
@@ -117,9 +117,9 @@ HERE;
                 $report .= show_statistics_data_table($data['query']['statistics'], 'statistics', "Statistics");
             }
 
-            // $sent = mail_report($result, $MwApi, $email);
-            $sent = true;
-            if ($email) {
+            $sent = mail_report($result . $report, $MwApi, $email);
+            // $sent = true;
+            if ($email) { // show only if $email is not empty 
                 if( $sent === true ) {
                     $result .= '<div class="alert alert-success" role="alert">'
                     . '<span class="glyphicon glyphicon-send" aria-hidden="true"></span>'
@@ -132,7 +132,7 @@ HERE;
                     . '<span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>'
                     . '<span class="sr-only">Error:</span>'
                     . 'Sorry there was an error sending your report. '
-                    . $sent
+                    . htmlspecialchars($sent)
                     . 'Please let us know at info@eQuality-Tech.com'
                     . '</div>';
                 }
@@ -222,7 +222,7 @@ include('navline.php');
                             <div class="col-sm-10">
                                 <input type="email" class="form-control" id="email" name="email" placeholder="you@example.com" 
                                        value="<?php if($_POST) {echo htmlspecialchars($email);} ?>">
-                                <p class="help-block">Enter your email to receive a report. (not required)</p>
+                                <p class="help-block">Mail a copy of this report? (not required)</p>
 <?php if (isset($err['Email'])) {
     echo "<p class='text-danger'>{$err['Email']}</p>";
 } ?>

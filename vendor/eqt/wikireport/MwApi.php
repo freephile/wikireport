@@ -86,15 +86,18 @@ class MwApi {
     var $wikiid;
     var $writeapi;
 
-    var $current_version = '1.26wmf8';
-    var $current_url = 'https://en.wikipedia.org/';
-    var $current_date = "2015/06/05";
+    var $reference_version = '1.26wmf13';
+    var $reference_url = 'https://en.wikipedia.org/';
+    var $reference_date = "2015/07/15";
     
     /**
      * 
      * @param string $endpoint the API Url for a given wiki
      */
     public function __construct($endpoint) {
+        if (is_null($endpoint) || empty($endpoint) ) {
+            die( __METHOD__ . " died because \$endpoint is null or empty");
+        }
         $this->endpoint = $endpoint;
         $this->makeQuery();
         //populate all our variables, not using magic methods
@@ -146,9 +149,11 @@ class MwApi {
      * The freshness values correspond to class names in Bootstrap
      * so we can re-use in UI for messaging
      */
-    function getFreshness () {
+    function getFreshness ($v = null) {
         $fresh='danger';
-        $v = $this->versionString;
+        if ( is_null($v) ) {
+            $v = $this->versionString;
+        }
         switch ($v) {
             case ( version_compare($v, '1.26.0') >= 0 ) :
                 $fresh='success';

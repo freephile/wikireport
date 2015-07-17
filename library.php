@@ -23,16 +23,26 @@ require __DIR__ . '/vendor/autoload.php';
 
 function mail_report($report, $MwApi, $email=null) {
     require __DIR__ . '/secret.php';
+    $byline = <<<HERE
+<div>
+<br />
+<br />
+    Report brought to you by eQuality Technology<br />
+    <a href="https://freephile.org/wikireport/">Get another Wiki Report</a>
+</div>
+HERE;
     // echo "sending for $gmailUser\n<br />";
     // return true;
     // mail the report
+    $report .= $byline;
     $mail = new PHPMailer;
     $mail->isSMTP();      // Set mailer to use SMTP
     $mail->SMTPDebug = 0; // 0 no debugging - 4 is maximum
     //Ask for HTML-friendly debug output
     $mail->Debugoutput = 'html';
 
-    $mail->Host = 'smtp.gmail.com';              // Specify SMTP server(s)
+    //$mail->Host = 'smtp.gmail.com';              // Specify SMTP server(s)
+    $mail->Host = gethostbyname("smtp.gmail.com");
     $mail->SMTPAuth = true;                      // Enable SMTP authentication
     $mail->Username = $gmailUser;                // SMTP username
     $mail->Password = $gmailPassword;            // SMTP password

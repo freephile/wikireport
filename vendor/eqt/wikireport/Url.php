@@ -151,6 +151,78 @@ class Url {
         $url = $scheme . $url;
         return $url;
     }
+/**
+ * Example of using curl and getting timing info.
+ * The file_get_contents() approach was abysmal for performance (waiting)
+// Create a curl handle
+$ch = curl_init($this->url);
+// return the content as a string instead of direct output
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+// Execute
+$data = curl_exec($ch);
+// Check if any error occurred
+if(!curl_errno($ch)) {
+  $info = curl_getinfo($ch);
+  echo 'Took ' . $info['total_time'] . ' seconds to send a request to ' . $info['url'];
+}
+// Close handle
+curl_close($ch);
+
+// $data = file_get_contents($this->url);
+*/          
+
+    /** 
+    * Send a GET requst using cURL 
+    * @param string $url to request 
+    * @param array $get values to send 
+    * @param array $options for cURL 
+    * @return string 
+    */ 
+    function curl_get($url, array $get = NULL, array $options = array()) {    
+        $defaults = array( 
+            CURLOPT_URL => $url. (strpos($url, '?') === FALSE ? '?' : ''). http_build_query($get), 
+            CURLOPT_HEADER => 0, 
+            CURLOPT_RETURNTRANSFER => TRUE, 
+            CURLOPT_TIMEOUT => 1 
+        ); 
+
+        $ch = curl_init(); 
+        curl_setopt_array($ch, ($options + $defaults)); 
+        if( ! $result = curl_exec($ch)) 
+        { 
+            trigger_error(curl_error($ch)); 
+        } 
+        curl_close($ch); 
+        return $result; 
+    }
+    /** 
+    * Send a POST requst using cURL 
+    * @param string $url to request 
+    * @param array $post values to send 
+    * @param array $options for cURL 
+    * @return string 
+    */ 
+    function curl_post($url, array $post = NULL, array $options = array()) { 
+        $defaults = array( 
+            CURLOPT_POST => 1, 
+            CURLOPT_HEADER => 0, 
+            CURLOPT_URL => $url, 
+            CURLOPT_FRESH_CONNECT => 1, 
+            CURLOPT_RETURNTRANSFER => 1, 
+            CURLOPT_FORBID_REUSE => 1, 
+            CURLOPT_TIMEOUT => 4, 
+            CURLOPT_POSTFIELDS => http_build_query($post) 
+        ); 
+
+        $ch = curl_init(); 
+        curl_setopt_array($ch, ($options + $defaults)); 
+        if( ! $result = curl_exec($ch)) 
+        { 
+            trigger_error(curl_error($ch)); 
+        } 
+        curl_close($ch); 
+        return $result; 
+    }
     
     /**
      * get_headers is helpful in that it recursively follows redirects to find

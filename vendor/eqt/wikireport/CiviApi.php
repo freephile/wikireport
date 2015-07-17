@@ -42,8 +42,70 @@ class CiviApi {
     var $count;   // 1
     var $id;      // 2525
     var $values;  // Array
-    
+
     var $msg;
+
+    /**
+     * This map is particular to our instance of CiviCRM
+     * If you're using this code, you will have to change this to match your
+     * particular setup AFTER you create the custom fields in CiviCRM
+     * @var array map of General wiki data to Civi Custom fields
+     */
+    var $genKeys = array (
+        "wUrl"       => "custom_40",
+        "mainpage"   => "custom_41",
+        "base"       => "custom_42",
+        "sitename"   => "custom_43",
+        "logo"       => "custom_44",
+        "generator"  => "custom_45",
+        "phpversion" => "custom_46",
+    // "phpsapi", 
+        "dbtype"     => "custom_47",
+        "dbversion"  => "custom_48",
+    // "externalimages", 
+    // "langconversion", 
+    // "titleconversion", 
+    // "linkprefixcharset", 
+    // "linkprefix", 
+    // "linktrail", 
+    // "legaltitlechars", 
+    // "git-hash", 
+    // "git-branch", 
+    // "case", 
+    // "lang", 
+    // "fallback", 
+    // "fallback8bitEncoding", 
+        "writeapi"    => "custom_49",
+        "timezone"    => "custom_50",
+        "timeoffset"  => "custom_51",
+        "articlepath" => "custom_52",
+        "scriptpath"  => "custom_53",
+    // "script", 
+    // "variantarticlepath", 
+        "server"      => "custom_54",
+        "servername"  => "custom_55",
+        "wikiid"      => "custom_56",
+        "time"        => "custom_57",
+        "maxuploadsize" => "custom_58",
+    // "thumblimits", 
+    // "imagelimits", 
+        "favicon"     => "custom_59",
+    );
+
+    // https://freephile.org/w/api.php?action=query&meta=siteinfo&siprop=statistics&format=txt
+
+    var $statKeys = array(
+        "wUrl"     => "custom_60",
+        "pages"    => "custom_61",
+        "articles" => "custom_62",
+        "edits"    => "custom_63",
+        "images"   => "custom_64",
+        "users"    => "custom_65",
+        "activeusers" => "custom_66",
+        "admins"   => "custom_67",
+        "jobs"     => "custom_68",
+    );
+    
     
     public function __construct() {
         // bootstrap Drupal
@@ -112,6 +174,9 @@ class CiviApi {
     }
     
     
+    /**
+     * Make sure when using the result that you use the 'values' element
+     */
     function getWebsite($url, $fuzzy=false) {
         $params = array(
             'sequential' => 1,
@@ -147,7 +212,101 @@ class CiviApi {
         $result = $this->makeCall('website', 'create' ,$params);
         return $result;
     }
+    
+    /**
+     * We'll check if the $url is a wiki
+     * If it is, then we'll check for a website record in our database
+     * We will add or update that website record
+     * @param type $url
+     */
+    function add_custom_data($url) {
+        $wurl = new \eqt\wikireport\UrlWiki($url);
+        if ($wurl->isWiki()) {
+            $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
+            $MwApi = new \eqt\wikireport\MwApi($wurl->apiUrl);
+            $MwApi->makeQuery($apiQuery);
+            $data        = $MwApi->data;
+            $general     = $MwApi->data['query']['general'];
+            // $this->msg[] = print_r($general, true);
+            $values      = array();
 
+            // we don't use 
+            // $fresh        = $MwApi->getFreshness();
+            $canonicalUrl = $MwApi->base;
+            $this->msg[] = "<b>'" . $MwApi->sitename . "'</b> is a wiki at $canonicalUrl";
+            
+            $civiRecord = $this->getWebsite($canonicalUrl, false);
+
+            if ( $civiRecord['count'] !== 1 ) {
+                $this->msg[] = 
+                   "Found too many or too few records ({$civiRecord['count']}) for $canonicalUrl";
+                $this->msg[] = "Exiting " . __METHOD__ . " without adding data";
+                exit();
+            }
+
+            $contactId = $civiRecord['values'][0]['contact_id'];
+            $websiteId = $civiRecord['id'];
+            $type = $civiRecord['values'][0]['website_type_id'];
+            if ($type !== '16') {
+                $this->msg[] = "The Civi website record {$civiRecord['id']} is type $type; it should be updated to type 16";
+            }
+            // get general
+            $values['custom_40'] = (string) $canonicalUrl; // we set this ourselves
+                foreach ($general as $k => $v) {
+                    if ( in_array($k, array_keys($this->genKeys)) ) {
+                        $values["{$this->genKeys[$k]}"] = $v;
+                    }
+                }
+            // get stats
+            if (version_compare($wurl->versionString, '1.10.0') >= 0) {
+                $stats = $MwApi->getStats();
+                $stats = $stats['query']['statistics'];
+                $this->msg[] = print_r($stats, true);
+                $values['custom_60'] = (string) $canonicalUrl; // we set this ourselves
+                foreach ($stats as $k => $v) {
+                    if ( in_array($k, array_keys($this->statKeys)) ) {
+                        $values["{$this->statKeys[$k]}"] = $v;
+                    }
+                }
+            }
+            // get extensions data
+            if (version_compare($wurl->versionString, '1.16.0') >= 0) {
+                // we currently do not support Extensions in custom data
+                // maybe store in a note? how searchable would they be?
+            }
+            
+            // record data
+            $timestamp = time();
+            $recorded = date("Y-m-d", $timestamp);
+            $params = array(
+              'sequential' => 1,
+              'id' => $contactId,
+              'custom_69' => $recorded,
+              'custom_70' => $recorded,
+            );
+            $params += $values; // union arrays
+            $result = $this->makeCall('Contact', 'create', $params);
+            if ($result['is_error']) {
+                $this->msg[] = "Error trying to set custom data for <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$contactId\">$contactId</a>";
+            } else {
+                $msg = "Success! Updated custom data for <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$contactId\">$contactId</a>";
+                $this->msg[] = $msg;
+                echo $msg;
+            }
+        }
+        // $this->msg[] = print_r($MwApi, true);
+    }
     
-    
+    /**
+     * 
+     * @param array $params
+     * @return array API response where 'values' is the key for records
+     */
+    function getNote($params) {
+        $params += array(
+            'sequential' => 1,
+        );
+        $result = $this->makeCall('Note', 'get', $params);
+        return $result;
+    }
 }
