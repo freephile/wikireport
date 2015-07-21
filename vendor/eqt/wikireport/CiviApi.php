@@ -42,6 +42,8 @@ class CiviApi {
     var $count;   // 1
     var $id;      // 2525
     var $values;  // Array
+    var $UrlWiki; // can hold an UrlWiki object
+    var $MwApi; // can hold MwApi object
 
     var $msg;
 
@@ -123,11 +125,16 @@ class CiviApi {
      * I try to just echo $url (the object); I get the output of the webpage??
      */
     function __toString() {
+        echo __CLASS__;
         echo nl2br(implode(PHP_EOL , $this->msg));
+        if ($this->UrlWiki) {
+            echo "Here is the UrlWiki object msg<br />\n";
+            echo $this->UrlWiki->__toString();
+        }
     }
 
     /**
-     * makeCall is a generic wrapper around the CiviCRM API so that we can more
+     * make_call is a generic wrapper around the CiviCRM API so that we can more
      * easily make "get", "create" and other calls to the API.
      * 
      * Note that if you add debug => 1 to your params, you'll get a 'trace' value
@@ -138,7 +145,7 @@ class CiviApi {
      * @param type $params
      * @return boolean
      */
-    function makeCall($entity, $action= null, $params) {
+    function make_call($entity, $action= null, $params) {
         if ($action == null) { $action = 'get'; }
         // Check if CiviCRM is installed here.
         if (!module_exists('civicrm')) {
@@ -169,7 +176,9 @@ class CiviApi {
         $this->count    = $result['count'];
         $this->id       = $result['id'];
         $this->values   = $result['values'];
-        $this->msg[]    = __METHOD__ . " called on $entity with action $action, returning $this->id.";
+        $msg = ($result['id'])? "id {$result['id']}" : "count {$result['count']}";
+        $msg = __METHOD__ . " called on $entity with action $action, returning " . $msg;
+        $this->msg[]    = $msg; 
         return $result;
     }
     
@@ -177,9 +186,10 @@ class CiviApi {
     /**
      * Make sure when using the result that you use the 'values' element
      */
-    function getWebsite($url, $fuzzy=false) {
+    function website_get($url, $fuzzy=false) {
         $params = array(
             'sequential' => 1,
+            'options' => array('limit' => 1),
         );
         if ($fuzzy) {
             $params2 = array ('url' => array('LIKE' => "%$url%"));
@@ -188,7 +198,7 @@ class CiviApi {
         }
         $params = $params + $params2; // array union
 
-        $result = $this->makeCall('website', 'get' ,$params);
+        $result = $this->make_call('website', 'get' ,$params);
         if ($result['is_error']) {
             echo "Error finding website for $url";
             return false;
@@ -205,11 +215,20 @@ class CiviApi {
      * @param array $params
      * @return array the array is passed back to the caller.
      */
-    function createWebsiteRecord($params) {
+    function website_create($params) {
         if ( !in_array('contact_id', array_keys($params)) ) {
             die ("You can not create a Website record without a 'contact_id'");
         }
-        $result = $this->makeCall('website', 'create' ,$params);
+        if (!in_array('id', array_keys($params))) {
+            // let's do a lookup to see if a pre-existing record exists so as
+            // not to have multiple website records for the same URL
+            $r1 = $this->website_get($params['url']);
+            if ($r1['count']) {
+                $this->msg[] = "Website already exists, adding in the id {$r1['id']}";
+                $params += array('id' => $r1['id']);
+            }
+        }
+        $result = $this->make_call('website', 'create' ,$params);
         return $result;
     }
     
@@ -221,7 +240,7 @@ class CiviApi {
      */
     function add_custom_data($url) {
         $wurl = new \eqt\wikireport\UrlWiki($url);
-        if ($wurl->isWiki()) {
+        if ($wurl->is_wiki()) {
             $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
             $MwApi = new \eqt\wikireport\MwApi($wurl->apiUrl);
             $MwApi->makeQuery($apiQuery);
@@ -235,7 +254,7 @@ class CiviApi {
             $canonicalUrl = $MwApi->base;
             $this->msg[] = "<b>'" . $MwApi->sitename . "'</b> is a wiki at $canonicalUrl";
             
-            $civiRecord = $this->getWebsite($canonicalUrl, false);
+            $civiRecord = $this->website_get($canonicalUrl, false);
 
             if ( $civiRecord['count'] !== 1 ) {
                 $this->msg[] = 
@@ -285,7 +304,7 @@ class CiviApi {
               'custom_70' => $recorded,
             );
             $params += $values; // union arrays
-            $result = $this->makeCall('Contact', 'create', $params);
+            $result = $this->make_call('Contact', 'create', $params);
             if ($result['is_error']) {
                 $this->msg[] = "Error trying to set custom data for <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$contactId\">$contactId</a>";
             } else {
@@ -298,15 +317,326 @@ class CiviApi {
     }
     
     /**
+     * When you get a note via the Civi API, you don't get back the subject by 
+     * default, so if you want that field too, then specify it in  the params
+     *   'return' => "subject, id, entity_table, entity_id, note",
+     * 
+     * If you want to get more than a single note and know the ids, then pass them
+     * as an array 
+     *   'id' => array('IN' => array(2316, 2334, 2357, 2359)),
+     * 
+     * If you are just looking for notes with/without a subject, you can qualify
+     * using the various operators
+     * '=', '<=', '>=', '>', '<', 'LIKE',"<>", "!=",  "NOT LIKE" , 'IN', 'NOT IN'
+     * 'BETWEEN', 'NOT BETWEEN', 'IS NULL', 'IS NOT NULL'
+     * 
+     *   'subject' => array('IS NULL' => 1),
+     * or 
+     *   'subject' => array('IS NOT NULL' => 1)
+     * Oddly, you can't do 'IS NULL' => 0 to look for subjects
      * 
      * @param array $params
      * @return array API response where 'values' is the key for records
      */
-    function getNote($params) {
+    function note_get($params) {
         $params += array(
             'sequential' => 1,
         );
-        $result = $this->makeCall('Note', 'get', $params);
+        $result = $this->make_call('Note', 'get', $params);
         return $result;
+    }
+    
+    /**
+     * When you pass in $params like
+     *   'entity_id' => 2000,
+     *   'note' => "This is just a test",
+     * 
+     * You will be creating a note for contact record 2000
+     * 
+     * It won't have the 'created by' info, so if you want that also, add
+     * 'contact_id' => 2,
+     * to make the note 'by Greg Rundlett'
+     * 
+     * The default (contact_id not specified) is to attribute the note to the 
+     * same entity that the note is being created for.  So if I create a note
+     * for ACME Widgets, without specifying a contact_id, the changelog will 
+     * show that a note was created for ACME Widgets __by__ ACME Widgets
+     * 
+     * The result of creating a note looks like this:
+     * 
+        {
+            "is_error": 0,
+            "undefined_fields": [
+                "entity_table",
+                "modified_date",
+                "entity_id",
+                "note",
+                "privacy"
+            ],
+            "version": 3,
+            "count": 1,
+            "id": 3790,
+            "values": [
+                {
+                    "id": "3790",
+                    "entity_table": "civicrm_contact",
+                    "entity_id": "2000",
+                    "note": "This is just a test",
+                    "contact_id": "2",
+                    "modified_date": "20150718000000",
+                    "subject": "",
+                    "privacy": "0"
+                }
+            ]
+        }
+     * 
+     * @param array $params
+     * 
+     * Deleting a note is straightforward.  You just need the note id
+     * Instead of creating a new method, just call makeCall()
+     * The result you get back will look like this:
+        {
+            "is_error": 0,
+            "version": 3,
+            "count": 1,
+            "values": 1
+        }
+     * Apparently the ONLY operator that is valid is '=' when deleting a note
+     * Therefore, you can't delete 'id'=> array('IN'=> array(6, 7, 8)),
+     * You can only delete 'id' => 6
+     */
+    function note_create($params) {
+        $required = array('entity_id', 'note');
+        foreach ($required as $v) {
+            if(!array_key_exists($v, $params)) {
+                die("Unable to create a Note without $v");
+            }
+        }
+        $params += array(
+            'sequential' => 1,
+            'contact_id' => 2, // this attributes all notes to Greg Rundlett
+        );
+        $result = $this->make_call('Note', 'create', $params);
+        return $result;
+    }
+    
+    
+    /**
+     * Groups
+     * 
+     * You can do a Group get with the API and you'll get a response with values 
+     * like the following which tells you all about the groups in the system
+        {
+            "id": "11",
+            "name": "Read_Restricted_No_API_11",
+            "title": "Read Restricted",
+            "description": "API present, but read permission denied",
+            "is_active": "1",
+            "visibility": "User and User Admin Only",
+            "where_clause": " ( `civicrm_group_contact-11`.group_id IN ( 11 )  AND `civicrm_group_contact-11`.status IN (\"Added\") ) ",
+            "select_tables": "a:8:{s:15:\"civicrm_contact\";i:1;s:15:\"civicrm_address\";i:1;s:15:\"civicrm_country\";i:1;s:13:\"civicrm_email\";i:1;s:13:\"civicrm_phone\";i:1;s:10:\"civicrm_im\";i:1;s:19:\"civicrm_worldregion\";i:1;s:26:\"`civicrm_group_contact-11`\";s:167:\" LEFT JOIN civicrm_group_contact `civicrm_group_contact-11` ON (contact_a.id = `civicrm_group_contact-11`.contact_id AND `civicrm_group_contact-11`.group_id IN ( 11 ))\";}",
+            "where_tables": "a:2:{s:15:\"civicrm_contact\";i:1;s:26:\"`civicrm_group_contact-11`\";s:167:\" LEFT JOIN civicrm_group_contact `civicrm_group_contact-11` ON (contact_a.id = `civicrm_group_contact-11`.contact_id AND `civicrm_group_contact-11`.group_id IN ( 11 ))\";}",
+            "group_type": [
+                "2"
+            ],
+            "parents": "3",
+            "is_hidden": "0",
+            "is_reserved": "0",
+            "created_id": "2",
+            "modified_id": "2"
+        },
+     * 
+     * To find out which groups a contact belongs to
+     * you can issue a GroupContact get with the 'contact_id'
+        $result = civicrm_api3('GroupContact', 'get', array(
+          'sequential' => 1,
+          'contact_id' => 4988,
+        ));
+     * which will tell you about all the groups that a contact belongs to such as
+        {
+            "is_error": 0,
+            "version": 3,
+            "count": 3,
+            "values": [
+                {
+                    "id": "7167",
+                    "group_id": "3",
+                    "title": "MediaWiki",
+                    "visibility": "Public Pages",
+                    "is_hidden": "0",
+                    "in_date": "2015-05-11 14:11:38",
+                    "in_method": "Admin"
+                },
+                {
+                    "id": "9548",
+                    "group_id": "7",
+                    "title": "tmpMediaWikiGrp",
+                    "visibility": "User and User Admin Only",
+                    "is_hidden": "0",
+                    "in_date": "2015-06-17 15:36:26",
+                    "in_method": "Admin"
+                },
+                {
+                    "id": "8399",
+                    "group_id": "4",
+                    "title": "US",
+                    "visibility": "User and User Admin Only",
+                    "is_hidden": "0",
+                    "in_date": "2015-05-11 14:11:38",
+                    "in_method": "Admin"
+                }
+            ]
+        }
+     * 
+     * When you do something wrong, you'll get 'is_error' = 1 and 'error_message'
+        {
+            "is_error": 1,
+            "error_message": "group_id is a required field"
+        }
+
+     * To add a contact to a group, use 'create' on the 'GroupContact' entity.
+     * Specify the contact_id and the group_id
+        $result = civicrm_api3('GroupContact', 'create', array(
+          'sequential' => 1,
+          'group_id' => "mediawiki_3",
+          'contact_id' => 2,
+        ));
+        {
+            "is_error": 0,
+            "version": 3,
+            "count": 1,
+            "values": 1,
+            "total_count": 1,
+            "added": 1,
+            "not_added": 0
+        }
+     * when that contact is already a member of the group in question, they will
+     * be part of the 'not_added' count:
+        {
+            "is_error": 0,
+            "version": 3,
+            "count": 1,
+            "values": 1,
+            "total_count": 1,
+            "added": 0,
+            "not_added": 1
+        }
+     */
+    
+    /**
+     * $groups = array (
+     * 11 => "Read Restricted",
+     * 12 => "Not Wiki",
+     * 13 => "No API",
+     * 14 => "No email",
+     * );
+     * @param array $params
+     * @return type
+     */
+    function group_create($params = array()) {
+        $required = array('contact_id', 'group_id');
+        foreach ($required as $v) {
+            if(!array_key_exists($v, $params)) {
+                die("Unable to assign a Group without $v");
+            }
+        }
+        $params += array(
+            'sequential' => 1,
+        );
+        $result = $this->make_call('GroupContact', 'create', $params);
+        if ($result 
+                && $result['is_error'] === 0 
+                && (int) $result['count'] === 1 
+                && $result['added'] === 1
+            ) {
+           $this->msg[] = "set Group {$params['group_id']} on contact <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid={$params['contact_id']}\">{$params['contact_id']}</a>";
+        } elseif ( (int) $result['count'] === 1 && $result['added'] === 0 ) {
+            $this->msg[] = "contact {$params['contact_id']} was already a member of Group {$params['group_id']}";
+        }
+        return $result;
+    }
+    
+    function add_UrlWiki( \eqt\wikireport\UrlWiki $UrlWiki ) {
+        $this->UrlWiki = $UrlWiki;
+    }
+    
+    
+    /**
+     * A function that will retrieve note records, and convert them to website
+     * records.  As a by-product, it will also add the contact to certain groups
+     * such as No API or Permission Denied when the site is a wiki but is not
+     * accessible.
+     * 
+     * A single invocation would look like this
+        $nid = 3802;
+        $params=array('id'=>$nid);
+        $CiviApi->note_to_website($params, true);
+     * 
+     * @param array $params the options to select which notes to operate on
+     * @param bool $delete whether to delete the notes on successful conversion
+     */
+    function note_to_website($params, $delete = false, $debug=false) {
+        $results = $this->note_get($params);
+        if ($results['is_error']) {
+            die ("Could not complete operation due to error");
+        }
+        foreach ($results['values'] as $note) {
+            $nid = $note['id'];
+            $url = trim($note['note']);
+            // skip notes that contain a space
+            if (strstr($url, ' ')) {
+                $msg = "Ignoring note $nid because it doesn't look like a URL";
+                $this->msg[] = $msg;
+                echo "$msg<br/>";
+                continue;
+            }
+            $entity_id = $note['entity_id'];
+            $UrlWiki = new \eqt\wikireport\UrlWiki($url);
+            $isWiki = $UrlWiki->is_wiki();
+
+            if ($isWiki) { // create the website record, delete the note
+                $params = array(
+                    'contact_id' => $entity_id,
+                    'url' => $UrlWiki->wikiUrl,
+                    'website_type_id' => 'wiki', // type 16
+                );
+                $results3 = $this->website_create($params);
+                // dispose of the note
+                if ($results3 && !$results3->is_error) {
+                    $params = array('id'=>$nid);
+                    if ($delete) {
+                        $this->make_call('Note', 'delete', $params);
+                    } else {
+                        $this->msg[] = "Should have deleted Note $nid";
+                    }
+                    $msg = "<a href=\"{$UrlWiki->wikiUrl}\">{$UrlWiki->wikiUrl}</a> converted for contact <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$entity_id\">$entity_id</a>";
+                    $this->msg[] = $msg;
+                    echo "$msg<br />";
+                }
+            }
+            
+            // is_wiki will populate 'error' when determining if we can read the endpoint
+            // set the group membership appropriately
+            if ( isset($UrlWiki->error) && $UrlWiki->error > 0 )  {
+                $this->group_create($params = array(
+                        'group_id' => $UrlWiki->error,
+                        'contact_id' => $entity_id
+                    ));
+                // also move the note "out of the way" by adding a subject
+                
+                $params = array(
+                    'entity_id' => $entity_id,
+                    'id' => $nid,
+                    'subject' => "Problem converting note",
+                    'note' => "$url"
+                );
+                $this->note_create($params);
+                echo "Ignoring note $nid (Problem converting $url for <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$entity_id\">$entity_id</a>)<br />";
+            }
+            
+            if ($debug) {
+                $this->msg[] = $UrlWiki->__toString();
+            }
+        }
     }
 }

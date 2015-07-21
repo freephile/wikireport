@@ -65,15 +65,15 @@ if ( isset($_POST) && ! empty($_POST) ) {
         // We're good to go, do processing
         
         $data = '';
-        $wurl = new \eqt\wikireport\UrlWiki($url);
-        if ($wurl->isWiki()) {
-            $MwApi = new \eqt\wikireport\MwApi($wurl->apiUrl);
+        $UrlWiki = new \eqt\wikireport\UrlWiki($url);
+        if ($UrlWiki->is_wiki()) {
+            $MwApi = new \eqt\wikireport\MwApi($UrlWiki->apiUrl);
             $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
-            if (version_compare($wurl->versionString, '1.10.0') >= 0) {
+            if (version_compare($UrlWiki->versionString, '1.10.0') >= 0) {
                 $apiQuery .= '|statistics';
             }
             // extensions become available in 1.16
-            if (version_compare($wurl->versionString, '1.16.0') >= 0) {
+            if (version_compare($UrlWiki->versionString, '1.16.0') >= 0) {
                 $apiQuery .= '|extensions';
             }
             $MwApi->makeQuery($apiQuery);
@@ -87,7 +87,7 @@ if ( isset($_POST) && ! empty($_POST) ) {
             $canonicalUrl = $MwApi->base;
             if (empty($canonicalUrl)) {
                 $err['WikiPerm'] = "Unable to access basic info. (non-standard API endpoint; or permission problem)";
-                $err['WikiPerm'] .= "You can try to access $wurl->apiUrl{$apiQuery}";
+                $err['WikiPerm'] .= "You can try to access $UrlWiki->apiUrl{$apiQuery}";
             }
             $result .= <<<HERE
             <div class="alert alert-$fresh" role="alert">
@@ -140,8 +140,8 @@ HERE;
             
         } else {
             // bad url
-            if ($wurl->apiUrl) {
-                $err['Url'] = "Error: {$wurl->data['error']['code']} Info: {$wurl->data['error']['info']}";
+            if ($UrlWiki->apiUrl) {
+                $err['Url'] = "Error: {$UrlWiki->data['error']['code']} Info: {$UrlWiki->data['error']['info']}";
             } else {
                 $err['Url'] = "No wiki found at that URL";
             }

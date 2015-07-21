@@ -67,7 +67,7 @@ function explodeNote ($note) {
                 'contact_id' => 2,
             );
             $CiviApi = new \eqt\wikireport\CiviApi();
-            $result = $CiviApi->makeCall('Note', 'create', $params);
+            $result = $CiviApi->make_call('Note', 'create', $params);
             if ($result) {
                 $counter++;
             }
@@ -78,7 +78,7 @@ function explodeNote ($note) {
                 'id' => $note['id'],
             );            
             $CiviApi = new \eqt\wikireport\CiviApi();
-            $result = $CiviApi->makeCall('Note', 'delete', $params);
+            $result = $CiviApi->make_call('Note', 'delete', $params);
             if ($result) {
                 echo "<div>Cleaned up the original note {$note['id']} "
                 . "that contained $count urls.  See "
@@ -110,7 +110,7 @@ function processNote ($note, $delete=false) {
     $staleNotes = array();
     // extract the url and turn it into a wiki website url
     $wurl    = new \eqt\wikireport\UrlWiki($url);
-    if ( $wurl->isWiki() ) {
+    if ( $wurl->is_wiki() ) {
         $website_id = getWebsiteId($wurl->wikiUrl); // check if it already exists
         // now we can call create; with or without an id
         $params = array(
@@ -139,7 +139,7 @@ function processNote ($note, $delete=false) {
             );
             $CiviNoteApi = new \eqt\wikireport\CiviApi();
             $action = ($delete)? 'delete' : 'get';
-            $result = $CiviNoteApi->makeCall('Note', $action, $params);
+            $result = $CiviNoteApi->make_call('Note', $action, $params);
             // echo "<div>$action note {$result['id']} from contact {$result['entity_id']} is {$result['note']}</div>\n";
             pre_print($result);
             
@@ -196,7 +196,7 @@ function createWebsiteRecord($params) {
         die ("You can not create a Website record without a 'contact_id'");
     }
     $CiviApi = new \eqt\wikireport\CiviApi();
-    $result = $CiviApi->makeCall('website', 'create' ,$params);
+    $result = $CiviApi->make_call('website', 'create' ,$params);
     return $result;
 }
 
@@ -227,7 +227,7 @@ function UrlWikiTest() {
         echo "<div>testing $k</div>\n";
         $UrlWiki = new \eqt\wikireport\UrlWiki($v);
         // $UrlWiki->find_redirect(); // http://wikitravel.org/en/Main_Page
-        $isWiki = $UrlWiki->isWiki();
+        $isWiki = $UrlWiki->is_wiki();
         echo "<div>$v is a wiki? ";
         echo ($isWiki)? "TRUE": "FALSE";
         echo "</div>\n";
@@ -256,7 +256,7 @@ $params = array(
     'options' => array('limit' => 30)
 );
 $CiviApi = new \eqt\wikireport\CiviApi();
-$result = $CiviApi->makeCall('Note', 'get', $params);
+$result = $CiviApi->make_call('Note', 'get', $params);
 $notes = $result['values'];
 $staleNotes = array();
 echo "<ol>";
@@ -272,14 +272,14 @@ foreach ($notes as $note) {
         continue;
     }
     $UrlWiki = new \eqt\wikireport\UrlWiki($url);
-    $isWiki = $UrlWiki->isWiki();
+    $isWiki = $UrlWiki->is_wiki();
 
     echo "<li><a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$entity_id\">$entity_id</a> note: <b>$url</b>\n";
     // echo "<!-- by {$note['api.Contact.get']['values'][0]['display_name']} --> ";
     if ( $isWiki && !empty($UrlWiki->wikiUrl) ) {
         echo "$UrlWiki->wikiUrl is backed by $UrlWiki->apiUrl";
         // 
-        $results = $CiviApi->getWebsite($UrlWiki->wikiUrl);
+        $results = $CiviApi->website_get($UrlWiki->wikiUrl);
         $websiteId = $results->id; // null in most cases
         // now we can call create with and id to update/null to create
         $params = array(
@@ -288,7 +288,7 @@ foreach ($notes as $note) {
             'url' => $UrlWiki->wikiUrl,
             'website_type_id' => 'wiki',
         );
-        $results = $CiviApi->createWebsiteRecord($params);
+        $results = $CiviApi->website_create($params);
         if ($results) {
             echo "<div>remapped $url to $UrlWiki->wikiUrl and created/updated website record for <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$entity_id\">contact $entity_id</a>\n<br />";
             // print $UrlWiki->__toString();
@@ -314,7 +314,7 @@ echo "</ol>";
  *
  */
 $CiviApi = new \eqt\wikireport\CiviApi();
-$results = $CiviApi->makeCall('Website', 'get', array(
+$results = $CiviApi->make_call('Website', 'get', array(
   'sequential' => 1,
   'website_type_id' => 16,
   // 'return' => "id,contact_id,url",

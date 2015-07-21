@@ -57,7 +57,7 @@ include('navline.php');
         'url' => array('IS NOT NULL' => 1),
     );
     $CiviApi = new \eqt\wikireport\CiviApi();
-    $result = $CiviApi->makeCall('Website', 'get', $params);
+    $result = $CiviApi->make_call('Website', 'get', $params);
     $websites = $result['values'];
 
     $i = 0;
@@ -87,7 +87,7 @@ include('navline.php');
         'api.Contact.get' => array(),
     );
     $CiviApi = new \eqt\wikireport\CiviApi();
-    $result = $CiviApi->makeCall('Website', 'get', $params);
+    $result = $CiviApi->make_call('Website', 'get', $params);
     $websites = $result['values'];
 
     $i = 0;

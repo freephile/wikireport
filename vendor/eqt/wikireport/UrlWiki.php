@@ -38,6 +38,21 @@ namespace eqt\wikireport;
  * @author greg
  */
 class UrlWiki extends \eqt\wikireport\Url {
+    const GIVEN = "API URL given";
+    const NO_CONNECTION = "Error: unable to connect";
+    const REALLY_SIMPLE_DISCOVERY = "RSD (Really Simple Discovery)";
+    const RSS_ATOM = "RSS ATOM feed";
+    const GENERATOR  = "Generator tag found";
+    const GUESS ="we guessed";
+    
+    // for the types of conditions we find in is_wiki()
+    // not really fleshed out yet
+    public $isWikiErrors = array(
+     0 => "API is not enabled. (try Special:Version)",
+     11 => '', // we don't have json, we have an error message that the API is not enabled
+    );
+
+
     public $orginalUrl;
     
     public $url;
@@ -58,6 +73,8 @@ class UrlWiki extends \eqt\wikireport\Url {
     
     public $data;
     
+    public $endpointMethod;
+    
     public $versionString;
     
     public $error; // an integer that corresponds to the Civi Group (11 = Perms/No API)
@@ -66,9 +83,9 @@ class UrlWiki extends \eqt\wikireport\Url {
         parent::__construct($url);
         $timer = new \eqt\wikireport\Profiler();
         $timer->stopwatch();
-        $this->find_endpoint();
+        $this->set_endpoint($url);
         $timer->stopwatch();
-        $this->msg[] = $timer->getElapsedTime( __METHOD__ . " took ", "on line ". __LINE__, false);
+        $this->msg[] = $timer->getElapsedTime( __METHOD__ . " set_endpoint() took ", " seconds on line ". __LINE__, false);
     }
 
     /** 
@@ -82,24 +99,24 @@ class UrlWiki extends \eqt\wikireport\Url {
      * If any URI produced by a MediaWiki installation is given, we will do our best
      * to determine what the URI of api.php is.
      */
-    function find_endpoint($url = null) {
+    function set_endpoint($url = null) {
         if ( is_null($url) ) {
             $url = $this->url;
         }
-        $this->msg[] = "finding an endpoint for $url";
         if ( substr($url, -7) == 'api.php' ) {
-            $this->msg[] = "given a URL ending with api.php, so using that for \$this->apiUrl";
-            $this->apiUrl = $url;
-            return true;
+            $this->endpointMethod = self::GIVEN; // 0 GIVEN
+            $apiUrl = $url;
         } else {
-            // we only redirect if starting off without an endpoint (api.php)
-            $this->find_redirect();
-            $data = $this->curl_get($this->url);
+            //follow any "Location: " header that the server sends 
+            $opts = array(
+                CURLOPT_FOLLOWLOCATION => 1, 
+            );
+            $data = $this->curl_get($url, null, $opts);
             switch ($data) {
                 // short-circuit if we can't even connect to $this->url    
                 case ($data === false) :
-                    $this->msg[] = __METHOD__ . ": Unable to connect to $this->url (bad URL?)";
-                    return false;
+                    $apiUrl = null;  // nuclear
+                    $this->endpointMethod = self::NO_CONNECTION; // 5 NO_CONNECTION
                 // As of v1.17 The API now has a Really Simple Discovery module, 
                 // useful for publishing service information by the API. 
                 // The RSD link looks like
@@ -107,16 +124,17 @@ class UrlWiki extends \eqt\wikireport\Url {
                 // <link rel="EditURI" type="application/rsd+xml" href="//en.wikipedia.org/w/api.php?action=rsd" />
                 // if ( preg_match( '#<link rel="EditURI" type="application/rsd\+xml" href="(.*)\?action=rsd"#', $data, $matches) ) {
                 case ( preg_match('#EditURI.* href\="(.*)\?action\=rsd"#U', $data, $matches) && $matches[1] ):
-                    $this->apiUrl = $matches[1];
-                    $this->prefix_scheme($this->parsedUrl['scheme'], $this->apiUrl);
-                    $this->msg[] = __METHOD__ . " setting apiUrl ($this->apiUrl) from EditURI/Really Simple Discovery";
+                    $apiUrl = $matches[1];
+                    // var_dump($matches);
+                    $this->endpointMethod = self::REALLY_SIMPLE_DISCOVERY; // 1 REALLY_SIMPLE_DISCOVERY
+                    $apiUrl = $this->prefix_scheme($this->parsedUrl['scheme'], $apiUrl);
                     break;
                 
                 // Find api.php from the RSS feed link (accurate)
                 case ( preg_match('#link rel="alternate" type="application/(?:rss|atom)[^>]* href="(.*)\?title=#U', $data, $matches) && $matches[1] ):
-                    $this->apiUrl = str_ireplace('index.php', 'api.php', $matches[1]);
-                    $this->make_absolute($this->apiUrl);
-                    $this->msg[] = __METHOD__ . " setting apiUrl ($this->apiUrl) from RSS link";
+                    $apiUrl = str_ireplace('index.php', 'api.php', $matches[1]);
+                    $this->endpointMethod = self::RSS_ATOM; // 2 RSS_ATOM
+                    $this->make_absolute($apiUrl); // we sometimes get relative links
                     break;
 
                 // older versions of MediaWiki don't have a EditURI link, but 
@@ -124,65 +142,108 @@ class UrlWiki extends \eqt\wikireport\Url {
                 // <meta name="generator" content="MediaWiki 1.15.1" />
                 // <meta name="generator" content="MediaWiki 1.16.5" />
                 case ( preg_match('#meta name="generator"[^>]* content="(MediaWiki[^"]+)"#U', $data, $matches) && $matches[1] ):
-                    $this->guess_api();
-                    $this->msg[] = __METHOD__ . " found generator, guessing api ($this->apiUrl)";
+                    $apiUrl = $this->guess_api();
+                    $this->endpointMethod = self::GENERATOR; // 3 GENERATOR
                     break;
 
                 default:
-                    $this->guess_api();
-                    $this->msg[] = __METHOD__ . ": We guessed at $this->apiUrl (given $this->url)";
+                    $apiUrl = $this->guess_api();
+                    $this->endpointMethod = self::GUESS; // 4 GUESS
             }
-            return true;
         }
-
+        $this->apiUrl = $apiUrl;
+        // logging
+        $this->msg[] = __METHOD__ . " set apiUrl ($apiUrl) from " . $this->endpointMethod;
     }
+    
     /**
      * getter/setter for $this->isWiki
      * 
-     * Using a tell-tale 'signature' of a MediaWiki generated page, we can tell
-     * if a particular URI is generated by MediaWiki.
+     * function depends on having $this->apiUrl set
+     * 
+     * Depending on the outcome of testing apiUrl, we will know that a URL is
+     * or is not a wiki.
+     * 
+     * Furthermore, we will know that for a "good" wiki, whether there is a
+     * problem or restriction such as the API not being set, or there being read
+     * permission restrictions on the API.  Thus a side-effect of this method should
+     * be that group memberships for a contact (url) are set in CiviCRM
+     * 
+     * 
+     * The url we are testing (CiviCRM contact)
+     * is a member of one of the following groups (established in Civi CRM)
+     * We can use the CiviApi::createGroup() method to assign to group membership
+     * $groups = array (
+     * 3 = > "MediaWiki,
+     * 11 => "Read Restricted",
+     * 12 => "Not Wiki",
+     * 13 => "No API", // API is not enabled. (try Special:Version)
+     * 14 => "No email",
+     * );
      * 
      * @return (bool) $this->isWiki
      */
-    function isWiki () {
+    function is_wiki () {
         $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
-        
+        // I don't think this is necessary because there is no other setter
         if( isset($this->isWiki) ) {
+            $this->error = 0;
             $this->msg[] = "isWiki was already set.  Returning $this->isWiki.";
             return $this->isWiki;
         }
-        if ( $this->find_endpoint() ) {
-            $this->isWiki = true;
+        if (empty($this->apiUrl)) {
+            die (__METHOD__ . " was called without apiUrl being set");
         }
         $url = $this->apiUrl . $apiQuery;
-        $json = $this->curl_get($url);
+        $opts = array(
+            CURLOPT_FOLLOWLOCATION => 1, //follow any "Location: " header that the server sends 
+            CURLOPT_HEADER => 0, // include the header in the output.
+            CURLOPT_FAILONERROR => 0, // don't fail on error
+            CURLOPT_SSL_VERIFYPEER => false, // stop cURL from verifying the peer's certificate
+            CURLOPT_CONNECTTIMEOUT => 3,
+        );
+
+        $json = $this->curl_get($url, null, $opts);
         if ( strstr($json, 'wgEnableAPI') ) {
             // we don't have json, we have an error message that the API is not enabled
-            $this->msg[] = __METHOD__ . " although a wiki, we're returning false because the API is not enabled. (try Special:Version)";
-            $this->error = 11;
-            $this->isWiki = false;
-            return false;
+            $this->msg[] = "API is not enabled. (try Special:Version)";
+            $this->error = 13;
+            $this->isWiki = true;
+            return true;
         }
-        // echo "<pre>"; var_dump($json); echo "</pre>";
+        // note that PHP warnings emitted in the HTML (broken website) will 
+        // break our decode, and thus be considered "not a wiki"
         $this->data = json_decode($json, true);
-        // echo "<pre>"; var_dump($this->data); echo "</pre>";
-        if ( isset($this->data['error']) && !empty($this->data['error']) ) {
-            // echo "<pre>"; var_dump($this->data); echo "</pre>";
-            $this->msg[] = __METHOD__ . " although a wiki, we're returning false because of code {$this->data['error']['code']} meaning {$this->data['error']['info']}";
-            $this->error = 11;
+        // json_decode will return null if we didn't actually get back json in the first place
+        if (is_null($this->data)) {
+            $this->msg[] = __METHOD__ . " unable to decode JSON";
+            $this->error = 12; // Not Wiki
             $this->isWiki = false;
-            return false;
+        } else {
+            // The MediaWiki api will tell us if we don't have access or there is some internal problem with the API
+            if ( isset($this->data['error']) && !empty($this->data['error']) ) {
+                $this->msg[] = __METHOD__ . " MediaWiki gave us {$this->data['error']['code']} meaning {$this->data['error']['info']}";
+                $this->error = 11;
+                $this->isWiki = true;
+            } else {
+                // we've decoded the json, and we have no errors
+                $this->wikiUrl = $this->data['query']['general']['base'];
+                $this->sitename = $this->data['query']['general']['sitename'];
+                $this->generator = $this->data['query']['general']['generator'];
+                $this->versionString =  trim(str_ireplace("MediaWiki", '', $this->generator));
+
+
+                $this->msg[] = __METHOD__ . ": wiki found at $this->wikiUrl via $this->apiUrl (starting with $this->orginalUrl)";
+                $this->isWiki = true;
+                
+            }
         }
-        $this->wikiUrl = $this->data['query']['general']['base'];
-        $this->sitename = $this->data['query']['general']['sitename'];
-        $this->generator = $this->data['query']['general']['generator'];
-        $this->versionString =  trim(str_ireplace("MediaWiki", '', $this->generator));
-
-        $this->msg[] = __METHOD__ . ": wiki found at $this->wikiUrl via $this->apiUrl (starting with $this->orginalUrl)";
-
         return $this->isWiki;
     }
     
+    /**
+     * 
+     */
     function guess_api() {
         $apiUrl = $this->parsedUrl['scheme'] . '://';
         $apiUrl .= $this->parsedUrl['host'];
@@ -198,7 +259,6 @@ class UrlWiki extends \eqt\wikireport\Url {
             $apiUrl .= 'w'; // add back the 'wiki' portion
         }
         $apiUrl .= "/api.php";
-        $this->apiUrl = $apiUrl;
         return $apiUrl;
     }   
 

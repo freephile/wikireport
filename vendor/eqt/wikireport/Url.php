@@ -74,7 +74,7 @@ class Url {
         $this->sanitize_url();
         $this->url = $this->prefix_scheme(); // web form will have scheme
         $this->parsedUrl = parse_url($this->url); // will be used by find-redirect, and re-called
-        $this->find_redirect();
+        // $this->find_redirect();
     }
     
     /**
@@ -82,7 +82,7 @@ class Url {
      * I try to just echo $url (the object); I get the output of the webpage??
      */
     function __toString() {
-        echo nl2br(implode(PHP_EOL , $this->msg));
+        return nl2br(implode(PHP_EOL , $this->msg));
     }
     
     /**
@@ -170,7 +170,35 @@ curl_close($ch);
 
 // $data = file_get_contents($this->url);
 */          
-
+    /**
+     * A wrapper around the native curl_getinfo()
+     * 
+     * @param type $url
+     * @param array $options
+     * @return type
+     */
+    function curl_get_info($url = NULL, array $options = array()) {
+        apache_setenv('no-gzip', '1');
+        if ( is_null($url) ) {
+            $url = $this->url;
+        }
+        $defaults = array( 
+            CURLOPT_URL => $url,
+            CURLOPT_HEADER => 1, 
+            CURLOPT_RETURNTRANSFER => TRUE, // return a string instead of direct output
+            CURLOPT_TIMEOUT => 3, // The maximum number of seconds to allow cURL functions to execute
+        );
+        $ch = curl_init();
+        curl_setopt_array($ch, ($options + $defaults)); 
+        if( ! $result = curl_exec($ch)) 
+        { 
+            trigger_error(curl_error($ch)); 
+        }
+        $info = curl_getinfo($ch);
+        $this->msg[] = print_r($info, true);
+        curl_close($ch);
+        return $info;
+    }
     /** 
     * Send a GET requst using cURL 
     * @param string $url to request 
@@ -178,20 +206,31 @@ curl_close($ch);
     * @param array $options for cURL 
     * @return string 
     */ 
-    function curl_get($url, array $get = NULL, array $options = array()) {    
+    function curl_get($url = NULL, array $get = NULL, array $options = array()) {  
+        if ( is_null($url) ) {
+            $url = $this->url;
+        }
+        $opt_url = $url;
+        $query = is_null($get)? '' :  http_build_query($get);
+        if (!is_null($get)) {
+           $opt_url .= (strpos($url, '?') === FALSE)? '?' : '';
+           $opt_url .= $query;
+        }
+        // curl_setopt_array() can use valid constants or their integer equivalents
         $defaults = array( 
-            CURLOPT_URL => $url. (strpos($url, '?') === FALSE ? '?' : ''). http_build_query($get), 
+            CURLOPT_URL => $opt_url, 
             CURLOPT_HEADER => 0, 
-            CURLOPT_RETURNTRANSFER => TRUE, 
-            CURLOPT_TIMEOUT => 1 
+            CURLOPT_RETURNTRANSFER => TRUE, // return a string instead of direct output
+            CURLOPT_TIMEOUT => 3, // The maximum number of seconds to allow cURL functions to execute
         ); 
 
-        $ch = curl_init(); 
+        $ch = curl_init();
         curl_setopt_array($ch, ($options + $defaults)); 
         if( ! $result = curl_exec($ch)) 
         { 
             trigger_error(curl_error($ch)); 
         } 
+//          $this->msg[] = print_r(curl_getinfo($ch), true);
         curl_close($ch); 
         return $result; 
     }
@@ -261,11 +300,11 @@ curl_close($ch);
     
     function make_absolute( &$url ) {
         if ( substr($url, 0, 4) == 'http' || stristr($url, $this->parsedUrl['host']) ) {
-            return true;
+            return;
         }
         $url = $this->parsedUrl['scheme'] . '://' . 
                $this->parsedUrl['host'] . $url;
-        return true;
+        return;
     }
 
     /**
