@@ -46,9 +46,9 @@ include('navline.php');
 <?php
 // make this query https://freephile.org/w/api.php?action=parse&page=Wiki%20report
 $apiQuery = "?action=parse&page=Wiki%20report&format=json";
-$MwApi = new \eqt\wikireport\MwApi2('https://freephile.org/w/api.php');
+$MwApi = new \eqt\wikireport\MwApi('https://freephile.org/w/api.php');
 $MwApi->makeQuery($apiQuery);
-$data = $MwApi->arrayData;
+$data = $MwApi->data;
 print ($data['parse']['text']['*']);
 ?>
             
