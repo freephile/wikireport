@@ -53,7 +53,7 @@ namespace eqt\wikireport;
         parent::__construct($url);
         $timer = new \eqt\wikireport\Profiler();
         $timer->stopwatch();
-        $this->find_endpoint();
+        $this->set_endpoint();
         $timer->stopwatch();
         $this->msg[] = $timer->getElapsedTime( __METHOD__ . " took ", "on line ". __LINE__, false);
     }
