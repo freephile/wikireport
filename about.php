@@ -42,7 +42,9 @@ include('navline.php');
 
                 </div>
             </div>
-
+            
+            <div class="row">
+                <div class="col-md-6 col-md-offset-3">
 <?php
 // make this query https://freephile.org/w/api.php?action=parse&page=Wiki%20report
 $apiQuery = "?action=parse&page=Wiki%20report&format=json";
@@ -51,9 +53,9 @@ $MwApi->makeQuery($apiQuery);
 $data = $MwApi->data;
 print ($data['parse']['text']['*']);
 ?>
-            
+                </div>
+            </div>
 
-            
         </div>
 <?php
 include('footer.php');

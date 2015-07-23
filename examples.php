@@ -42,13 +42,16 @@ include('navline.php');
 
                 </div>
             </div>
+            <div class="row">
+                <div class="col-md-6 col-md-offset-3">
+            
 <!-- Good Wikis -->
-            <div class="table-responsive">
-                <table id="wiki-general-table" class="table table-striped table-condensed table-bordered table-hover">
-                    <thead>
-                    <tr><th>#</th><th>Wiki</th></tr>
-                    </thead>
-                    <tbody>
+                    <div class="table-responsive">
+                        <table id="wiki-general-table" class="table table-striped table-condensed table-bordered table-hover">
+                            <thead>
+                            <tr><th>#</th><th>Wiki</th></tr>
+                            </thead>
+                            <tbody>
 <?php
     $params = array(
         'sequential' => 1,
@@ -66,43 +69,12 @@ include('navline.php');
         echo "<tr><th>$i.</th><td><a href=\"index.php?url={$site['url']}\" target=\"_blank\">{$site['url']}</a></td></tr>\n";
     }
 ?>
-                    </tbody>
-                </table>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-<!-- Bad Wikis 
-            <div class="table-responsive">
-                <table id="wiki-general-table" class="table table-striped table-condensed table-bordered table-hover">
-                    <thead>
-                    <tr><th>#</th><th>Wiki</th></tr>
-                    </thead>
-                    <tbody>
--->
-<?php
-    $params = array(
-        'sequential' => 1,
-        'website_type_id' => "wiki",
-        'options' => array('limit' => 25),
-        'url' => array('IS NULL' => 1),
-        // chain another API call
-        'api.Contact.get' => array(),
-    );
-    $CiviApi = new \eqt\wikireport\CiviApi();
-    $result = $CiviApi->make_call('Website', 'get', $params);
-    $websites = $result['values'];
 
-    $i = 0;
-    foreach ($websites as $site) {
-        $i++;
-        // echo "<tr><th>$i.</th><td><a href=\"index.php?url={$site['url']}\" target=\"_blank\">{$site['url']}</a></td></tr>\n";
-        
-        //echo "<li>$i. <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid={$site['contact_id']}\"> {$site['contact_id']} ({$site['url']}) </a>  </li> \n";
-    }
-?>
-<!-- 
-                    </tbody>
-                </table>
-            </div>
--->
             <div class="row">
                 <div class="col-md-6 col-md-offset-3">
                     <h2 class="page-header text-center">Non-Examples</h2>
