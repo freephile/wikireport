@@ -1,3 +1,6 @@
 secret.php
 test.php
+fix.php
 /nbproject/*
+/vendor/*
+!/vendor/eqt/
