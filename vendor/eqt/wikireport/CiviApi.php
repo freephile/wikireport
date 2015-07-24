@@ -125,12 +125,9 @@ class CiviApi {
      * I try to just echo $url (the object); I get the output of the webpage??
      */
     function __toString() {
-        echo __CLASS__;
-        echo nl2br(implode(PHP_EOL , $this->msg));
-        if ($this->UrlWiki) {
-            echo "Here is the UrlWiki object msg<br />\n";
-            echo $this->UrlWiki->__toString();
-        }
+        $out = __CLASS__;
+        $out .= "\n<pre>\n" . nl2br(implode(PHP_EOL , $this->msg)) . "\n</pre>\n";
+        return $out;
     }
 
     /**
@@ -233,51 +230,62 @@ class CiviApi {
     }
     
     /**
-     * We'll check if the $url is a wiki
-     * If it is, then we'll check for a website record in our database
-     * We will add or update that website record
-     * @param type $url
+     * 
+     * @param mixed $cid either integer contact id or array of integers
+     * @return boolean
      */
-    function add_custom_data($url) {
-        $wurl = new \eqt\wikireport\UrlWiki($url);
-        if ($wurl->is_wiki()) {
-            $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
-            $MwApi = new \eqt\wikireport\MwApi($wurl->apiUrl);
-            $MwApi->makeQuery($apiQuery);
+    function custom_data_fetch($cid) {
+        if (is_array($cid)) {
+            foreach ($cid as $id) {
+                $this->custom_data_fetch( (int) $id );
+            }
+            return true;
+        }
+        /** don't need to refetch contact
+        $params = array("id" => $cid, 'sequential' => 1,);
+        $result = $this->make_call("Contact", "get", $params);
+        if ($result["is_error"]) {
+            die ("Unable to get Contact");
+        }
+        $contact = $result["values"];
+         * 
+         */
+        $webparams = array(
+            "sequential" => 1,
+            "contact_id" => $cid,
+            "website_type_id" => "16",
+            "options" => array ("limit" => 1),
+        );
+        $webresult = $this->make_call("Website", "get", $webparams);
+        if ($webresult["is_error"]) {
+            die ("Unable to get Website due to error {$webresult["is_error"]}");
+        }
+        if ($webresult['count'] == 0) {
+            $this->msg[] = "No wiki website for $cid; not fetching custom data";
+            return true;
+        }
+        $website = $webresult["values"][0];
+        $url = $website["url"];
+        $this->msg[] = "Getting data for $url";
+        $UrlWiki = new \eqt\wikireport\UrlWiki($url);
+        
+        if ($UrlWiki->is_wiki()) {
+            // var_dump($UrlWiki);
+            $MwApi = new \eqt\wikireport\MwApi($UrlWiki->apiUrl);
             $data        = $MwApi->data;
             $general     = $MwApi->data['query']['general'];
-            // $this->msg[] = print_r($general, true);
             $values      = array();
-
-            // we don't use 
-            // $fresh        = $MwApi->getFreshness();
             $canonicalUrl = $MwApi->base;
             $this->msg[] = "<b>'" . $MwApi->sitename . "'</b> is a wiki at $canonicalUrl";
-            
-            $civiRecord = $this->website_get($canonicalUrl, false);
-
-            if ( $civiRecord['count'] !== 1 ) {
-                $this->msg[] = 
-                   "Found too many or too few records ({$civiRecord['count']}) for $canonicalUrl";
-                $this->msg[] = "Exiting " . __METHOD__ . " without adding data";
-                exit();
-            }
-
-            $contactId = $civiRecord['values'][0]['contact_id'];
-            $websiteId = $civiRecord['id'];
-            $type = $civiRecord['values'][0]['website_type_id'];
-            if ($type !== '16') {
-                $this->msg[] = "The Civi website record {$civiRecord['id']} is type $type; it should be updated to type 16";
-            }
-            // get general
+            // set general data into values that we'll store
             $values['custom_40'] = (string) $canonicalUrl; // we set this ourselves
-                foreach ($general as $k => $v) {
-                    if ( in_array($k, array_keys($this->genKeys)) ) {
-                        $values["{$this->genKeys[$k]}"] = $v;
-                    }
+            foreach ($general as $k => $v) {
+                if ( in_array($k, array_keys($this->genKeys)) ) {
+                    $values["{$this->genKeys[$k]}"] = $v;
                 }
+            }
             // get stats
-            if (version_compare($wurl->versionString, '1.10.0') >= 0) {
+            if (version_compare($UrlWiki->versionString, '1.10.0') >= 0) {
                 $stats = $MwApi->getStats();
                 $stats = $stats['query']['statistics'];
                 $this->msg[] = print_r($stats, true);
@@ -289,7 +297,7 @@ class CiviApi {
                 }
             }
             // get extensions data
-            if (version_compare($wurl->versionString, '1.16.0') >= 0) {
+            if (version_compare($UrlWiki->versionString, '1.16.0') >= 0) {
                 // we currently do not support Extensions in custom data
                 // maybe store in a note? how searchable would they be?
             }
@@ -299,23 +307,27 @@ class CiviApi {
             $recorded = date("Y-m-d", $timestamp);
             $params = array(
               'sequential' => 1,
-              'id' => $contactId,
-              'custom_69' => $recorded,
-              'custom_70' => $recorded,
+              'id' => $cid, // update our record
+              'custom_69' => $recorded, // timestamp
+              'custom_70' => $recorded, // timestamp
             );
             $params += $values; // union arrays
             $result = $this->make_call('Contact', 'create', $params);
             if ($result['is_error']) {
-                $this->msg[] = "Error trying to set custom data for <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$contactId\">$contactId</a>";
+                $this->msg[] = "Error trying to set custom data for <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$cid\">$cid</a>";
             } else {
-                $msg = "Success! Updated custom data for <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$contactId\">$contactId</a>";
+                $msg = "Success! Updated custom data for <a href=\"https://equality-tech.com/civicrm/contact/view?reset=1&cid=$cid\">$cid</a>";
                 $this->msg[] = $msg;
                 echo $msg;
             }
+        } else {
+            $this->msg[] = __METHOD__ . " \$UrlWiki not is_wiki()"; 
+            $this->msg[] = print($UrlWiki->__toString());
         }
-        // $this->msg[] = print_r($MwApi, true);
+        return true;
     }
     
+   
     /**
      * When you get a note via the Civi API, you don't get back the subject by 
      * default, so if you want that field too, then specify it in  the params
@@ -404,6 +416,50 @@ class CiviApi {
      * Apparently the ONLY operator that is valid is '=' when deleting a note
      * Therefore, you can't delete 'id'=> array('IN'=> array(6, 7, 8)),
      * You can only delete 'id' => 6
+     * 
+     * 
+     *
+     * More examples or tests: 
+     * Create and Delete a note
+     *
+        $params = array(
+            'entity_id' => 3976, // hostbaby.com
+            'note' => 'Testing you fool',
+        );
+        $results = $CiviApi->note_create($params);
+
+        print "<div>created note<br /><pre>"; print_r ($results); print'</pre></div>';
+
+        $nid = $results['id'];
+
+        $params = array(
+          'id' => $nid,
+        );
+        $results = $CiviApi->make_call('Note', 'delete', $params);
+        print "<div>deleted $nid<br /><pre>"; print_r ($results); print'</pre></div>';
+
+     *
+     *  Delete a list of notes
+     * 
+     * 
+        $cids = array(3976, 3988, 3989, 3995, 3997, 3998, 4002, 4004);
+        $count = 0;
+        foreach ($cids as $contact_id) {
+            $params = array('entity_id' => $contact_id);
+            $results = $CiviApi->note_get($params);
+            foreach ($results['values'] as $note) {
+                $count++;
+                $nid = $note['id'];
+                $params2 = array('id'=> $nid);
+
+                $result = $CiviApi->make_call('Note', 'delete', $params2);
+                if ($result) {
+                    echo "Deleted note $nid for contact $contact_id<br />";
+                }
+            }
+        }
+        echo "<br />deleted $count notes";
+     * 
      */
     function note_create($params) {
         $required = array('entity_id', 'note');
@@ -572,10 +628,19 @@ class CiviApi {
         $params=array('id'=>$nid);
         $CiviApi->note_to_website($params, true);
      * 
+     * A fuller invocation would look like this
+        $params = array(
+            'subject' => array('IS NULL' => 1),
+            'options' => array('limit' => 1000, 'offset'=>0),
+        );
+        $delete = true;
+        $debug = false;
+        $CiviApi->note_to_website($params, $delete, $debug);
+     * 
      * @param array $params the options to select which notes to operate on
      * @param bool $delete whether to delete the notes on successful conversion
      */
-    function note_to_website($params, $delete = false, $debug=false) {
+    function note_to_website($params, $delete = false, $debug = false) {
         $results = $this->note_get($params);
         if ($results['is_error']) {
             die ("Could not complete operation due to error");
@@ -593,8 +658,8 @@ class CiviApi {
             $entity_id = $note['entity_id'];
             $UrlWiki = new \eqt\wikireport\UrlWiki($url);
             $isWiki = $UrlWiki->is_wiki();
-
-            if ($isWiki) { // create the website record, delete the note
+            // $isWiki can be true, but without a wikiUrl because the Api is not readable
+            if ($isWiki && $UrlWiki->wikiUrl) { // create the website record, delete the note
                 $params = array(
                     'contact_id' => $entity_id,
                     'url' => $UrlWiki->wikiUrl,

@@ -43,7 +43,12 @@ class UrlWiki extends \eqt\wikireport\Url {
     const REALLY_SIMPLE_DISCOVERY = "RSD (Really Simple Discovery)";
     const RSS_ATOM = "RSS ATOM feed";
     const GENERATOR  = "Generator tag found";
-    const GUESS ="we guessed";
+    const GUESS  = "we guessed";
+    const GUESS1 = "variant 1 replaced index.php with api.php";
+    const GUESS2 = "variant 2 strip wiki/";
+    const GUESS3 = "variant 3 keep anything 'wiki-ish' but throw away trailing path";
+    const GUESS4 = "variant 4 replace wiki-ish with w";
+    const GUESS5 = "variant 5 replace wiki-ish with mediawiki";
     
     // for the types of conditions we find in is_wiki()
     // not really fleshed out yet
@@ -83,7 +88,7 @@ class UrlWiki extends \eqt\wikireport\Url {
         parent::__construct($url);
         $timer = new \eqt\wikireport\Profiler();
         $timer->stopwatch();
-        $this->set_endpoint($url);
+        $this->endpoint_set($url);
         $timer->stopwatch();
         $this->msg[] = $timer->getElapsedTime( __METHOD__ . " set_endpoint() took ", " seconds on line ". __LINE__, false);
     }
@@ -99,7 +104,7 @@ class UrlWiki extends \eqt\wikireport\Url {
      * If any URI produced by a MediaWiki installation is given, we will do our best
      * to determine what the URI of api.php is.
      */
-    function set_endpoint($url = null) {
+    function endpoint_set($url = null) {
         if ( is_null($url) ) {
             $url = $this->url;
         }
@@ -112,6 +117,7 @@ class UrlWiki extends \eqt\wikireport\Url {
                 CURLOPT_FOLLOWLOCATION => 1, 
             );
             $data = $this->curl_get($url, null, $opts);
+            self::removeBOM($data);
             switch ($data) {
                 // short-circuit if we can't even connect to $this->url    
                 case ($data === false) :
@@ -142,12 +148,12 @@ class UrlWiki extends \eqt\wikireport\Url {
                 // <meta name="generator" content="MediaWiki 1.15.1" />
                 // <meta name="generator" content="MediaWiki 1.16.5" />
                 case ( preg_match('#meta name="generator"[^>]* content="(MediaWiki[^"]+)"#U', $data, $matches) && $matches[1] ):
-                    $apiUrl = $this->guess_api();
+                    $apiUrl = $this->endpoint_guess();
                     $this->endpointMethod = self::GENERATOR; // 3 GENERATOR
                     break;
 
                 default:
-                    $apiUrl = $this->guess_api();
+                    $apiUrl = $this->endpoint_guess();
                     $this->endpointMethod = self::GUESS; // 4 GUESS
             }
         }
@@ -156,6 +162,18 @@ class UrlWiki extends \eqt\wikireport\Url {
         $this->msg[] = __METHOD__ . " set apiUrl ($apiUrl) from " . $this->endpointMethod;
     }
     
+    /**
+     * Remove the Byte Order Mark (BOM) from files
+     * @param mixed $data is the contents of a file, which may have a binary BOM
+     * @return bool true if the BOM was removed
+     */
+    static function removeBOM(&$data) {
+        if (0 === strpos(bin2hex($data), 'efbbbf')) {
+           $data = substr($data, 3);
+           return true;
+        }
+        return false;
+    }
     /**
      * getter/setter for $this->isWiki
      * 
@@ -192,6 +210,7 @@ class UrlWiki extends \eqt\wikireport\Url {
             return $this->isWiki;
         }
         if (empty($this->apiUrl)) {
+            return false;
             die (__METHOD__ . " was called without apiUrl being set");
         }
         $url = $this->apiUrl . $apiQuery;
@@ -200,10 +219,11 @@ class UrlWiki extends \eqt\wikireport\Url {
             CURLOPT_HEADER => 0, // include the header in the output.
             CURLOPT_FAILONERROR => 0, // don't fail on error
             CURLOPT_SSL_VERIFYPEER => false, // stop cURL from verifying the peer's certificate
-            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_CONNECTTIMEOUT => 5, // @todo make this a configuration constant/variable
         );
 
         $json = $this->curl_get($url, null, $opts);
+        // var_dump($json);
         if ( strstr($json, 'wgEnableAPI') ) {
             // we don't have json, we have an error message that the API is not enabled
             $this->msg[] = "API is not enabled. (try Special:Version)";
@@ -213,13 +233,19 @@ class UrlWiki extends \eqt\wikireport\Url {
         }
         // note that PHP warnings emitted in the HTML (broken website) will 
         // break our decode, and thus be considered "not a wiki"
+        // some servers insert a BOM which breaks JSON!!!!
+        $hadBOM = self::removeBOM($json);
+        // may need to stripslashes also
+        /*
+        if (strstr($json, '\\/')) { // if we see http:\/\/foo.example.com
+            $json = stripslashes($json);
+        }
+         * 
+         */
+
         $this->data = json_decode($json, true);
-        // json_decode will return null if we didn't actually get back json in the first place
-        if (is_null($this->data)) {
-            $this->msg[] = __METHOD__ . " unable to decode JSON";
-            $this->error = 12; // Not Wiki
-            $this->isWiki = false;
-        } else {
+        if(json_last_error() === JSON_ERROR_NONE) {
+            // echo "we have good json";
             // The MediaWiki api will tell us if we don't have access or there is some internal problem with the API
             if ( isset($this->data['error']) && !empty($this->data['error']) ) {
                 $this->msg[] = __METHOD__ . " MediaWiki gave us {$this->data['error']['code']} meaning {$this->data['error']['info']}";
@@ -232,34 +258,73 @@ class UrlWiki extends \eqt\wikireport\Url {
                 $this->generator = $this->data['query']['general']['generator'];
                 $this->versionString =  trim(str_ireplace("MediaWiki", '', $this->generator));
 
-
                 $this->msg[] = __METHOD__ . ": wiki found at $this->wikiUrl via $this->apiUrl (starting with $this->orginalUrl)";
                 $this->isWiki = true;
-                
             }
+        } else {
+            $this->msg[] = __METHOD__ . " unable to decode JSON " . json_last_error() . " : " .  json_last_error_msg();
+            $this->error = 12; // Not Wiki
+            $this->isWiki = false;
         }
+        
         return $this->isWiki;
     }
     
     /**
+     * A simple test would look like this:
+     * (the method is invoked in the constructor)
      * 
+        $url = "http://colorwiki.com/wiki/ColorWiki_Home";
+        $UrlWiki = new \eqt\wikireport\UrlWiki($url);
+        print $UrlWiki->apiUrl;
+     *  
+     * returns 
+     * 
+       "http://colorwiki.com/api.php";
+     * 
+     * 
+     * @return mixed the URL of the MediaWiki api on success or false on failure
      */
-    function guess_api() {
-        $apiUrl = $this->parsedUrl['scheme'] . '://';
-        $apiUrl .= $this->parsedUrl['host'];
+    function endpoint_guess() {
+        $apiUrl = $this->parsedUrl['scheme'] . '://' . $this->parsedUrl['host'];
         $apiUrl .= isset($this->parsedUrl['port'])? ':' . $this->parsedUrl['port'] : '';
+
         // if the path contains 'index.php', grab the portion before that; eg. wiki/index.php.
-        if (strstr($this->parsedUrl['path'], 'index.php')) { 
-            $apiUrl .= substr($this->parsedUrl['path'], 0, 
-                    strpos($this->parsedUrl['path'], 'index.php'));
-        } elseif (strstr($this->parsedUrl['path'], 'wiki')) { 
-        // clean URLs with 'wiki' (no index.php), grab the portion before that (probably just a slash)
-            $apiUrl .= substr($this->parsedUrl['path'], 0, 
-                    strpos($this->parsedUrl['path'], 'wiki'));
-            $apiUrl .= 'w'; // add back the 'wiki' portion
+        $path = $this->parsedUrl['path'];
+        $pathVariants = array();
+        
+        // variant 1 replace index.php with api.php
+        if (strstr($path, 'index.php')) { 
+            $variant = substr($path, 0, strpos($path, 'index.php'));// up to but not including index.php
+            $pathVariants[] = $variant;
+            $this->endpointMethod = self::GUESS1;
         }
-        $apiUrl .= "/api.php";
-        return $apiUrl;
+        if (strstr($path, 'wiki/')) { 
+            $variant = substr($path, 0, strpos($path, 'wiki/'));
+            $pathVariants[] = $variant;
+            $this->endpointMethod = self::GUESS2;
+        }
+        if ($variant = preg_replace("#/([^/]*wiki[^/]*)/(.*)#i", "/$1/", $path)) {
+            $pathVariants[] = $variant;
+            $this->endpointMethod = self::GUESS3;
+        }
+        if ($variant = preg_replace("#/([^/]*wiki[^/]*)/(.*)#i", "/w/", $path)) {
+            $pathVariants[] = $variant;
+            $this->endpointMethod = self::GUESS4;
+        }        
+        if ($variant = preg_replace("#/([^/]*wiki[^/]*)/(.*)#i", "/mediawiki/", $path)) {
+            $pathVariants[] = $variant;
+            $this->endpointMethod = self::GUESS5;
+        }
+
+        foreach ($pathVariants as $variant) {
+            $test = $apiUrl . $variant . "api.php";
+            $headers = get_headers($test, 1);
+            if (stristr($headers[0], '200') && in_array("MediaWiki-API-Error", array_keys($headers)) ) {
+                return $apiUrl = $test;
+            }
+        }
+        return false;
     }   
 
 }

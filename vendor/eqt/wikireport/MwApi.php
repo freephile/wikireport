@@ -117,28 +117,40 @@ class MwApi {
         if ($query == '') {
             $query = $this->apiQuery;
         }
-        $data = json_decode(file_get_contents($this->endpoint . $query), true);
+        $data = file_get_contents($this->endpoint . $query);
+        /*
+        if (strstr($data, '\\/')) { // if we see http:\/\/foo.example.com
+            $data = stripslashes($data);
+        }
+         * 
+         */
+        UrlWiki::removeBOM($data);
+        $data = json_decode($data, true);
         $this->data = $data;
         return $data;
     }
     
     function getStats () {
         $query = '?action=query&meta=siteinfo&format=json&siprop=statistics';
-        $data = json_decode(file_get_contents($this->endpoint . $query), true);
-        $this->data['query']['statistics'] = $data['query']['statistics'];
+        $data = file_get_contents($this->endpoint . $query);
+        UrlWiki::removeBOM($data);
+        $data = json_decode($data, true);
         return $data;
     }
     
     function getGeneral () {
         $query = '?action=query&meta=siteinfo&format=json&siprop=general';
-        $data = json_decode(file_get_contents($this->endpoint . $query), true);
-        $this->data['query']['general'] = $data['query']['general'];
+        $data = file_get_contents($this->endpoint . $query);
+        UrlWiki::removeBOM($data);
+        $data = json_decode($data, true);
         return $data;
     }
     
     function getExtensions () {
         $query = '?action=query&meta=siteinfo&format=json&siprop=extensions';
-        $data = json_decode(file_get_contents($this->endpoint . $query), true);
+        $data = file_get_contents($this->endpoint . $query);
+        UrlWiki::removeBOM($data);
+        $data = json_decode($data, true);
         $this->data['query']['extensions'] = $data['query']['extensions'];
         return $data;
     }

@@ -186,7 +186,7 @@ curl_close($ch);
             CURLOPT_URL => $url,
             CURLOPT_HEADER => 1, 
             CURLOPT_RETURNTRANSFER => TRUE, // return a string instead of direct output
-            CURLOPT_TIMEOUT => 3, // The maximum number of seconds to allow cURL functions to execute
+            CURLOPT_TIMEOUT => 5, // The maximum number of seconds to allow cURL functions to execute
         );
         $ch = curl_init();
         curl_setopt_array($ch, ($options + $defaults)); 
@@ -221,7 +221,7 @@ curl_close($ch);
             CURLOPT_URL => $opt_url, 
             CURLOPT_HEADER => 0, 
             CURLOPT_RETURNTRANSFER => TRUE, // return a string instead of direct output
-            CURLOPT_TIMEOUT => 3, // The maximum number of seconds to allow cURL functions to execute
+            CURLOPT_TIMEOUT => 5, // The maximum number of seconds to allow cURL functions to execute
         ); 
 
         $ch = curl_init();
