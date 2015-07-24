@@ -49,6 +49,7 @@ class UrlWiki extends \eqt\wikireport\Url {
     const GUESS3 = "variant 3 keep anything 'wiki-ish' but throw away trailing path";
     const GUESS4 = "variant 4 replace wiki-ish with w";
     const GUESS5 = "variant 5 replace wiki-ish with mediawiki";
+    const CONNECT_TIMEOUT = 5; // also in the parent class
     
     // for the types of conditions we find in is_wiki()
     // not really fleshed out yet
@@ -201,7 +202,7 @@ class UrlWiki extends \eqt\wikireport\Url {
      * 
      * @return (bool) $this->isWiki
      */
-    function is_wiki () {
+    function is_wiki (array $opts) {
         $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
         // I don't think this is necessary because there is no other setter
         if( isset($this->isWiki) ) {
@@ -214,12 +215,12 @@ class UrlWiki extends \eqt\wikireport\Url {
             die (__METHOD__ . " was called without apiUrl being set");
         }
         $url = $this->apiUrl . $apiQuery;
-        $opts = array(
+        $opts += array(
             CURLOPT_FOLLOWLOCATION => 1, //follow any "Location: " header that the server sends 
             CURLOPT_HEADER => 0, // include the header in the output.
             CURLOPT_FAILONERROR => 0, // don't fail on error
             CURLOPT_SSL_VERIFYPEER => false, // stop cURL from verifying the peer's certificate
-            CURLOPT_CONNECTTIMEOUT => 5, // @todo make this a configuration constant/variable
+            CURLOPT_CONNECTTIMEOUT => self::CONNECT_TIMEOUT, // @todo make this a configuration constant/variable
         );
 
         $json = $this->curl_get($url, null, $opts);

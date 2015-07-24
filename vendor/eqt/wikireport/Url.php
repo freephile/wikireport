@@ -63,6 +63,8 @@ class Url {
      */
     public $parsedUrl;
     
+    const CONNECT_TIMEOUT = 5;
+    
     /**
      * Setup our messages array, remember the original value we were given,
      * sanitize the working value, and parse it.
@@ -186,7 +188,7 @@ curl_close($ch);
             CURLOPT_URL => $url,
             CURLOPT_HEADER => 1, 
             CURLOPT_RETURNTRANSFER => TRUE, // return a string instead of direct output
-            CURLOPT_TIMEOUT => 5, // The maximum number of seconds to allow cURL functions to execute
+            CURLOPT_TIMEOUT => self::CONNECT_TIMEOUT, // The maximum number of seconds to allow cURL functions to execute
         );
         $ch = curl_init();
         curl_setopt_array($ch, ($options + $defaults)); 
@@ -221,7 +223,7 @@ curl_close($ch);
             CURLOPT_URL => $opt_url, 
             CURLOPT_HEADER => 0, 
             CURLOPT_RETURNTRANSFER => TRUE, // return a string instead of direct output
-            CURLOPT_TIMEOUT => 5, // The maximum number of seconds to allow cURL functions to execute
+            CURLOPT_TIMEOUT => self::CONNECT_TIMEOUT, // The maximum number of seconds to allow cURL functions to execute
         ); 
 
         $ch = curl_init();
@@ -235,12 +237,15 @@ curl_close($ch);
         return $result; 
     }
     /** 
-    * Send a POST requst using cURL 
-    * @param string $url to request 
-    * @param array $post values to send 
-    * @param array $options for cURL 
-    * @return string 
-    */ 
+     * We haven't actually used this function yet, but it's here for later?
+     * If we do use it, it may well need some 'fixing' for PHP warnings
+     * 
+     * Send a POST requst using cURL 
+     * @param string $url to request 
+     * @param array $post values to send 
+     * @param array $options for cURL 
+     * @return string 
+     */ 
     function curl_post($url, array $post = NULL, array $options = array()) { 
         $defaults = array( 
             CURLOPT_POST => 1, 
@@ -249,7 +254,7 @@ curl_close($ch);
             CURLOPT_FRESH_CONNECT => 1, 
             CURLOPT_RETURNTRANSFER => 1, 
             CURLOPT_FORBID_REUSE => 1, 
-            CURLOPT_TIMEOUT => 4, 
+            CURLOPT_TIMEOUT => self::CONNECT_TIMEOUT, 
             CURLOPT_POSTFIELDS => http_build_query($post) 
         ); 
 
@@ -269,6 +274,8 @@ curl_close($ch);
      * 
      * By setting the optional second parameter to get_headers(), we will find
      * the redirect in the Location array (or string).
+     * 
+     * This method may be superceeded by the use of curl with CURLOPT_FOLLOWLOCATION
      * 
      * @return boolean true when we followed a redirect to arrive at a final url
      */
