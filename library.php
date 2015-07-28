@@ -27,7 +27,8 @@ function mail_report($report, $MwApi, $email=null) {
 <div>
 <br />
 <br />
-    This report was brought to you by eQuality Technology<br />
+    This report was brought to you by 
+    <img src="https://freephile.org/wikireport/favicon.ico" alt="="/> eQuality Technology<br />
     a leader in free software and wikis.<br />
     <a href="https://freephile.org/wikireport/">Get another Wiki Report</a>
 </div>
