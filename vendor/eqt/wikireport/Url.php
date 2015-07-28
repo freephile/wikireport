@@ -306,9 +306,16 @@ curl_close($ch);
     }
     
     function make_absolute( &$url ) {
-        if ( substr($url, 0, 4) == 'http' || stristr($url, $this->parsedUrl['host']) ) {
+        // nothing to do (switch to secure?)
+        if ( substr($url, 0, 4) == 'http') {
             return;
         }
+        // protocol relative link
+        if ( substr($url, 0, 2) == '//' ) {
+            $url = $this->parsedUrl['scheme'] . ':' . $url;
+            return;
+        }
+        // relative link
         $url = $this->parsedUrl['scheme'] . '://' . 
                $this->parsedUrl['host'] . $url;
         return;
