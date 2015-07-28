@@ -46,31 +46,42 @@ include('navline.php');
                 <div class="col-md-6 col-md-offset-3">
             
 <!-- Good Wikis -->
-                    <div class="table-responsive">
-                        <table id="wiki-general-table" class="table table-striped table-condensed table-bordered table-hover">
-                            <thead>
-                            <tr><th>#</th><th>Wiki</th></tr>
-                            </thead>
-                            <tbody>
+                    <div>
+
 <?php
-    $params = array(
+    $params =  array(
         'sequential' => 1,
-        'website_type_id' => "wiki",
-        'options' => array('limit' => 25),
-        'url' => array('IS NOT NULL' => 1),
+        'return' => "contact_id",
+        'custom_44' => array('IS NOT NULL' => 1), // 44 is the logo
+        'options' => array ('limit' => 30),
     );
     $CiviApi = new \eqt\wikireport\CiviApi();
-    $result = $CiviApi->make_call('Website', 'get', $params);
-    $websites = $result['values'];
+    $result = $CiviApi->make_call('Contact', 'get', $params);
+    $contacts = $result['values'];
 
     $i = 0;
-    foreach ($websites as $site) {
+    $rows = array();
+    foreach ($contacts as $contact) {
         $i++;
-        echo "<tr><th>$i.</th><td><a href=\"index.php?url={$site['url']}\" target=\"_blank\">{$site['url']}</a></td></tr>\n";
+        $cid = $contact['contact_id'];
+        $params = array(
+            'sequential' => 1,
+            'entity_id' => $cid,
+            'format' => 'array',
+        );
+        $rows[] = $CiviApi->customvalue_get($cid, $params);
     }
+    foreach ($rows as $row) {
+        if (empty($row['logo'])) {
+            continue;
+        }
+        $Url = new \eqt\wikireport\Url($row['wUrl']);
+        $Url->make_absolute($row['logo']);
+        echo "<a href=\"index.php?url={$row['wUrl']}\" style=\"margin:5px;\"class=\"padded\" title=\"{$row['sitename']} at {$row['wUrl']}\" target=\"_blank\"><img src=\"{$row['logo']}\" /></a>\n";
+    }
+        
 ?>
-                            </tbody>
-                        </table>
+
                     </div>
                 </div>
             </div>
