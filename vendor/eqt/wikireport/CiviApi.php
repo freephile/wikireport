@@ -289,7 +289,8 @@ class CiviApi {
                 $stats = $MwApi->getStats();
                 $stats = $stats['query']['statistics'];
                 $this->msg[] = print_r($stats, true);
-                $values['custom_60'] = (string) $canonicalUrl; // we set this ourselves
+                // custom_60 is the wUrl so we can display it with this group
+                $values['custom_60'] = (string) $canonicalUrl;
                 foreach ($stats as $k => $v) {
                     if ( in_array($k, array_keys($this->statKeys)) ) {
                         $values["{$this->statKeys[$k]}"] = $v;
@@ -327,7 +328,136 @@ class CiviApi {
         return true;
     }
     
+    /**
+     * For a contact, get all the custom data values, map those to labels
+     * and return the 'latest' value of each field.
+     * 
+        $result = civicrm_api3('Contact', 'get', array(
+            'sequential' => 1,
+            'return' => "contact_id",
+            'custom_40' => array('IS NOT NULL' => 1),
+            'options' => array ('limit' => 500),
+         ));
+
+         // get a list of contact ids
+        foreach ($result['values'] as $contact) {
+            $cids[] = $contact['contact_id'];
+        }
+        $params = array(
+            'sequential' => 1,
+            'format' => 'array',
+        );
+        $rows = $CiviApi->customvalue_get($cids, $params);
+     * 
+     * rows looks like this
+     * 
+            [wUrl] => https://wiki.mozilla.org/Main_Page
+            [mainpage] => Main Page
+            [base] => https://wiki.mozilla.org/Main_Page
+            [sitename] => MozillaWiki
+            [logo] => https://wiki.mozilla.org/assets/logos/mozilla-wiki-logo-alt-135px.png
+            [generator] => MediaWiki 1.23.9
+            [phpversion] => 5.3.3
+            [dbtype] => mysql
+            [dbversion] => 5.6.17-log
+            [writeapi] => 
+            [timezone] => America/Los_Angeles
+            [timeoffset] => -420
+            [articlepath] => /$1
+            [scriptpath] => 
+            [server] => https://wiki.mozilla.org
+            [servername] => 
+            [wikiid] => wiki_mozilla_org
+            [time] => 2015-07-15T20:15:27Z
+            [maxuploadsize] => 104857600
+            [favicon] => https://wiki.mozilla.org/assets/favicon.ico
+            [wiki Url] => https://wiki.mozilla.org/Main_Page
+            [pages] => 104538
+            [articles] => 20382
+            [edits] => 1208336
+            [images] => 10024
+            [users] => 331322
+            [activeusers] => 496
+            [admins] => 3
+            [jobs] => 1059
+            [recorded]
+     * 
+     * 
+     * 
+        foreach ($rows as $row) {
+            $out .= "<tr>";
+            $out .= "<td>{$row['wUrl']}</td>";
+            $out .= "<td>{$row['mainpage']}</td>";
+            $out .= "<td>{$row['base']}</td>";
+            $out .= "<td>{$row['sitename']}</td>";
+            $out .= "<td><img src=\"{$row['logo']}\" /></td>";
+            $out .= "<td>{$row['generator']}</td>";
+            $out .= "<td>{$row['phpversion']}</td>";
+            $out .= "<td>{$row['dbtype']}</td>";
+            $out .= "<td>{$row['dbversion']}</td>";
+            $out .= "<td>{$row['timezone']}</td>";
+            $out .= "<td><img src=\"{$row['favicon']}\" /></td>";
+            $out .= "<td>{$row['pages']}</td>";
+            $out .= "<td>{$row['articles']}</td>";
+            $out .= "</tr>";
+        }
+        $out = "<table>$out</table>";
+        print $out;
+     * 
+     * @param int $cid
+     * @param int $params
+     */
+    function customvalue_get($cid, $params=array()) {
+        $ret = null;
+        if (is_array($cid)) {
+            $return = null;
+            foreach ($cid as $id) {
+                $foo = $this->customvalue_get($id, $params);
+                if (is_array($foo)) {
+                    $return[] = $foo;
+                } else {
+                    $return .= $foo;
+                }
+            }
+            return $return;
+        }
+        $defaults = array(
+            'sequential' => 1,
+            'entity_id' => $cid,
+            'format' => html,
+        );
+        $params +=$defaults;
+        $haystack = $this->genKeys + $this->statKeys;
+        $addLabels = array (
+            'wiki Url' => 'custom_60',
+            'recorded' => 'custom_69',
+            'recorded' => 'custom_70',
+            );
+        $haystack += $addLabels;
+        $result = $this->make_call('CustomValue', 'get', $params);
+        
+        foreach ($result['values'] as $cvset) {
+            $needle = 'custom_' . $cvset['id'];
+            $label = array_search($needle,$haystack);
+            switch ($params['format']) {
+                case 'html':
+                    $ret .= "<div><strong>$label</strong> {$cvset['latest']}</div>\n";
+                    break;
+                case 'array':
+                    $ret[$label] = $cvset['latest'];
+                    break;
+                case 'txt':
+                default:
+                    $ret .= "$label , {$cvset['latest']}\n";
+                    break;
+            }
+            
+        }
+        return $ret;
+    }
    
+
+    
     /**
      * When you get a note via the Civi API, you don't get back the subject by 
      * default, so if you want that field too, then specify it in  the params
