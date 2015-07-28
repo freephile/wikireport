@@ -199,10 +199,30 @@ class UrlWiki extends \eqt\wikireport\Url {
      * 13 => "No API", // API is not enabled. (try Special:Version)
      * 14 => "No email",
      * );
+     *
+     * The constructor will set
      * 
+        [orginalUrl] => https://freephile.org/wiki/Main_Page
+        [url]  => https://freephile.org/wiki/Main_Page
+ =====> [apiUrl] => https://freephile.org/w/api.php    <========================
+        [endpointMethod] => RSD (Really Simple Discovery)
+        [parsedUrl] => Array (
+            [scheme] => https
+            [host] => freephile.org
+            [path] => /wiki/Main_Page )
+     * 
+     * As a result of running this method, we ALSO have the following
+     *  
+ =====> [isWiki:eqt\wikireport\UrlWiki:private] => 1   <========================
+        [wikiUrl] => https://freephile.org/wiki/Main_Page
+        [sitename] => Wiki
+        [generator] => MediaWiki 1.25beta
+        [versionString] => 1.25beta
+        [data] => (array of siprop=general) data['query']['general']
+     * @var array $opts optional settings for curl
      * @return (bool) $this->isWiki
      */
-    function is_wiki (array $opts) {
+    function is_wiki (array $opts=array()) {
         $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
         // I don't think this is necessary because there is no other setter
         if( isset($this->isWiki) ) {
