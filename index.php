@@ -68,6 +68,13 @@ if ( isset($_POST) && ! empty($_POST) ) {
         $UrlWiki = new \eqt\wikireport\UrlWiki($url);
         if ($UrlWiki->is_wiki()) {
             $MwApi = new \eqt\wikireport\MwApi($UrlWiki->apiUrl);
+            
+            // insert the record to Civi with group 'Incoming'
+            if ( $UrlWiki->wikiUrl ) { // some wikis don't have readable API
+                $CiviApi = new \eqt\wikireport\CiviApi();
+                $CiviApi->org_create_from_url($UrlWiki);
+            }
+            
             $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
             if (version_compare($UrlWiki->versionString, '1.10.0') >= 0) {
                 $apiQuery .= '|statistics';
@@ -240,6 +247,7 @@ include('navline.php');
                         </div>
                         <div class="form-group">
                             <div class="col-sm-10 col-sm-offset-2">
+                                <input type="hidden" id="quiet" name="quiet" value="<?php $quiet=filter_input(INPUT_GET, 'quiet', FILTER_VALIDATE_BOOLEAN); echo $quiet; ?>">
                                 <input id="submit" name="submit" type="submit" 
                                        value="Check wiki" class="btn btn-primary" >
                             </div>

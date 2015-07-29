@@ -173,12 +173,52 @@ class CiviApi {
         $this->count    = $result['count'];
         $this->id       = $result['id'];
         $this->values   = $result['values'];
-        $msg = ($result['id'])? "id {$result['id']}" : "count {$result['count']}";
+        $msg = (isset($result['id']))? "id {$result['id']}" : "count {$result['count']}";
         $msg = __METHOD__ . " called on $entity with action $action, returning " . $msg;
         $this->msg[]    = $msg; 
         return $result;
     }
     
+    function org_create_from_url(UrlWiki $UrlWiki) {
+        if (empty($UrlWiki->wikiUrl)) {
+            return false;
+            //die ("Need URL to create a contact");
+        }
+        $result = $this->website_get($UrlWiki->wikiUrl);
+        // print '<pre>'; print_r ($result); print'</pre>';
+        if ( $result['count'] === 0 ) {
+            $this->msg[] = "Adding new org from website URL {$UrlWiki->wikiUrl}";
+            $params2 = array(
+                'sequential' => 1,
+                'contact_type' => "Organization",
+                'organization_name' => $UrlWiki->sitename,
+                // "custom_18" => $email,
+            );
+            // don't need the return value, because we can use object properties
+            $result2 = $this->make_call('Contact', 'create', $params2);
+            $contact_id = $this->id;
+            // add a wiki website URL for this contact
+            $params3 = array(
+                'contact_id' => $contact_id, // the new contact
+                'url' => $UrlWiki->wikiUrl,
+                'website_type_id' => 'wiki', // type 16
+            );
+            $result3 = $this->website_create($params3);
+            // add the contact to the 'Incoming' group
+            $result4 = $this->group_create( 
+                array(
+                    'sequential' => 1,
+                    'group_id' => "Incoming_16",
+                    'contact_id' => $contact_id,
+                ));
+        } else {
+            // 'do nothing';
+        }
+        if ( $result3['count'] === 1 ) {
+            return true;
+        }
+        return false;
+    }
     
     /**
      * Make sure when using the result that you use the 'values' element
@@ -230,6 +270,7 @@ class CiviApi {
     }
     
     /**
+     * @todo add switch to not fetch or record data unless 'forced' when data exists
      * 
      * @param mixed $cid either integer contact id or array of integers
      * @return boolean
@@ -715,6 +756,8 @@ class CiviApi {
      * 12 => "Not Wiki",
      * 13 => "No API",
      * 14 => "No email",
+     * 15 => "BOM",
+     * 16 => "Inbound",
      * );
      * @param array $params
      * @return type
