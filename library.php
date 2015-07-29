@@ -22,6 +22,7 @@
 require __DIR__ . '/vendor/autoload.php';
 
 function mail_report($report, $MwApi, $email=null) {
+    global $quiet;
     require __DIR__ . '/secret.php';
     $byline = <<<HERE
 <div>
@@ -55,7 +56,10 @@ HERE;
     if (! is_null($email)) {
         $mail->addAddress($email);                   // Add a recipient
     }
-    $mail->addBCC('info@eQuality-Tech.com');
+    // I can suppress bcc by adding ?quiet=1 "true", "on", "yes"
+    if (isset($quiet) && $quiet != true) {
+        $mail->addBCC('info@eQuality-Tech.com');
+    }
     $mail->isHTML(true);                         // Set email format to HTML
     $mail->Subject = "Wiki Report for $MwApi->sitename ($MwApi->base).";
     $mail->Body = '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd">
