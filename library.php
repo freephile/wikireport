@@ -57,7 +57,8 @@ HERE;
         $mail->addAddress($email);                   // Add a recipient
     }
     // I can suppress bcc by adding ?quiet=1 "true", "on", "yes"
-    if (isset($quiet) && $quiet != true) {
+    //if (isset($quiet) && $quiet != true) {
+    if (!in_array($_SERVER['REMOTE_ADDR'], $ipWhitelist)) {
         $mail->addBCC('info@eQuality-Tech.com');
     }
     $mail->isHTML(true);                         // Set email format to HTML

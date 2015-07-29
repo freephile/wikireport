@@ -22,13 +22,12 @@
 require __DIR__ . '/vendor/autoload.php';
 // our generic functions
 require __DIR__ . '/library.php';
+require __DIR__ . '/secret.php';
 $err = array(); // our errors
 $result = '';
 $report = '';
 $form = new \eqt\wikireport\Form();
-// whitelist myself so I don't have to answer the captcha
-$ipWhitelist = array('50.177.140.82', '127.0.0.1');
-// echo $_SERVER['REMOTE_ADDR'];
+
 // url is pre-fillable via querystring
 // FILTER_VALIDATE_URL will not work with non-ascii domains, but we're only in the U.S.
 $url = filter_input(INPUT_GET, 'url', FILTER_SANITIZE_URL);
@@ -51,7 +50,7 @@ if ( isset($_POST) && ! empty($_POST) ) {
 
     // do reCaptcha verification for anyone not from hq
     if (!in_array($_SERVER['REMOTE_ADDR'], $ipWhitelist)) {
-        require( __DIR__ . "/secret.php" );
+
         $recaptcha = new \ReCaptcha\ReCaptcha($reCAPTCHAsecret);
         $resp = $recaptcha->verify($_POST['g-recaptcha-response'], $_SERVER['REMOTE_ADDR']);
         if ($resp->isSuccess()) {
@@ -216,6 +215,8 @@ include('navline.php');
                                     <input type="checkbox" value="extensions" id="extensions" name="options[]" 
 <?php echo ($form->isChecked("options", "extensions")) ? 'checked="checked"' : '' ?>/>
                                     Extensions
+                                    
+                                    
                                 </label>
                                 <label class="checkbox checkbox-success" for="statistics">
                                     <input type="checkbox" value="statistics" id="statistics" name="options[]" 
