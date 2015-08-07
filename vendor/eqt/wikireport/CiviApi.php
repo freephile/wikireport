@@ -282,6 +282,8 @@ class CiviApi {
             }
             return true;
         }
+        $timestamp = time();
+        $recorded = date("Y-m-d", $timestamp);
         /** don't need to refetch contact
         $params = array("id" => $cid, 'sequential' => 1,);
         $result = $this->make_call("Contact", "get", $params);
@@ -320,6 +322,7 @@ class CiviApi {
             $this->msg[] = "<b>'" . $MwApi->sitename . "'</b> is a wiki at $canonicalUrl";
             // set general data into values that we'll store
             $values['custom_40'] = (string) $canonicalUrl; // we set this ourselves
+            $values['custom_69'] = $recorded; // timestamp
             foreach ($general as $k => $v) {
                 if ( in_array($k, array_keys($this->genKeys)) ) {
                     $values["{$this->genKeys[$k]}"] = $v;
@@ -332,6 +335,7 @@ class CiviApi {
                 $this->msg[] = print_r($stats, true);
                 // custom_60 is the wUrl so we can display it with this group
                 $values['custom_60'] = (string) $canonicalUrl;
+                $values['custom_70'] = $recorded;
                 foreach ($stats as $k => $v) {
                     if ( in_array($k, array_keys($this->statKeys)) ) {
                         $values["{$this->statKeys[$k]}"] = $v;
@@ -345,13 +349,10 @@ class CiviApi {
             }
             
             // record data
-            $timestamp = time();
-            $recorded = date("Y-m-d", $timestamp);
+            
             $params = array(
               'sequential' => 1,
               'id' => $cid, // update our record
-              'custom_69' => $recorded, // timestamp
-              'custom_70' => $recorded, // timestamp
             );
             $params += $values; // union arrays
             $result = $this->make_call('Contact', 'create', $params);
@@ -758,7 +759,19 @@ class CiviApi {
      * 14 => "No email",
      * 15 => "BOM",
      * 16 => "Inbound",
+     * 17 => "QA_17"
+     * 18 => "resend_18",
      * );
+     * 
+     * According to the API Browser, you can use an array for contact_id but
+     * it did not work in testing. 
+     * contact_id parameter.  
+       $result = civicrm_api3('GroupContact', 'create', array(
+          'sequential' => 1,
+          'group_id' => "resend_18",
+          'contact_id' => array(2, 1),
+        ));
+     * 
      * @param array $params
      * @return type
      */
@@ -877,4 +890,5 @@ class CiviApi {
             }
         }
     }
+    
 }
