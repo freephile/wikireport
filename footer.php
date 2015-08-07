@@ -33,7 +33,7 @@
         <div class="row">
             <div class="col-md-6 col-md-offset-3">
                 <p class="muted credit"><a href="https://github.com/freephile/wikireport" class="rotator" title="copyleft AGPLv3">&copy; </a>ourtesy 2015 <a href="https://eQuality-Tech.com">eQuality Technology</a> and <a href="https://linkedin.com/in/freephile/">Greg Rundlett</a>
-<?php                    
+<?php
 $Profiler->end();
 $Profiler->stopwatch();
 echo "<br />";
@@ -48,9 +48,15 @@ echo $Profiler->__toString();
         </div>
     </div>
 </div>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
-<script src="https://freephile.org/wikireport/vendor/jquery-number/jquery.number.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+<script src="vendor/jquery-number/jquery.number.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
+<?php 
+if ($_SERVER['REQUEST_URI'] == '/wikireport/version.php') { 
+    echo '<script src="cssCharts/jquery.chart.js"></script>' . "\n";
+}
+?>
+
 <script>
    // format any class="number" element
    // we're using a jQuery plugin, but could use regular JavaScript
@@ -62,6 +68,14 @@ echo $Profiler->__toString();
        $('#url').val( $('#url').val().replace(/^(http:\/\/)https?:\/\//g, "$1", '') );               
     });
 
+<?php 
+if ($_SERVER['REQUEST_URI'] == '/wikireport/version.php') { 
+echo <<<HERE
+    // draw our chart on the version page
+    $('.pie-chart').cssCharts({type:"pie"});
+HERE;
+}
+?>
    // add Google Analytics
    // UA-39339059-2
 
