@@ -49,16 +49,16 @@ if ( isset($_POST) && ! empty($_POST) ) {
     } 
 
     // do reCaptcha verification for anyone not from hq
-    if (!in_array($_SERVER['REMOTE_ADDR'], $ipWhitelist)) {
+    //if (!in_array($_SERVER['REMOTE_ADDR'], $ipWhitelist)) {
 
         $recaptcha = new \ReCaptcha\ReCaptcha($reCAPTCHAsecret);
         $resp = $recaptcha->verify($_POST['g-recaptcha-response'], $_SERVER['REMOTE_ADDR']);
         if ($resp->isSuccess()) {
             // verified! $human 
         } else {
-            $err['Human'] = (string) $resp->getErrorCodes();
+            $err['Human'] = $resp->getErrorCodes();
         }
-    }
+    //}
 
     if ( !count($err) ) {
         // We're good to go, do processing
@@ -242,6 +242,7 @@ include('navline.php');
                                 <div class="g-recaptcha" data-sitekey="6LcjPwgTAAAAACwnvsybTIDSyvsNs0EkbxFkb-qw"></div>
                                 <input type="hidden" class="form-control" id="human" name="human" placeholder="Not a bot">
 <?php if (isset($err['Human'])) {
+    if (is_array($err['Human'])) { $err['Human'] = implode (" ", $err['Human']); }
     echo "<p class='text-danger'>{$err['Human']}</p>";
 } ?>
                             </div>
