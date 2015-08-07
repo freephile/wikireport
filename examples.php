@@ -43,10 +43,11 @@ include('navline.php');
                 </div>
             </div>
             <div class="row">
-                <div class="col-md-6 col-md-offset-3">
+                <div class="col-md-6 col-md-offset-3 text-center">
             
 <!-- Good Wikis -->
                     <div>
+                        <p>(Click to load in the reporter)</p>
 
 <?php
     $params =  array(
