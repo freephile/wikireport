@@ -24,12 +24,13 @@
 
 var thychart = {
   pie: function(node){
+    // var format = title+" <span style='color:blue;'><strong>" + val + "</strong>%</span>";
     var makeSVG = function(tag, attrs, val, title, i, fill) {
       var $el = $(document.createElementNS('http://www.w3.org/2000/svg', tag));
       var $g = $(document.createElementNS('http://www.w3.org/2000/svg', "g"));
 
       var $rep = $('<li><i></i><p></p></li>');
-          $rep.find("p").html(title+": " + val);
+          $rep.find("p").html(title+" <span style='color:blue;'><strong>" + val + "</strong>%</span>");
           $rep.find("i").css({background: fill});
 
           $chart.find("."+$leg.attr("class")).append($rep);
@@ -140,7 +141,7 @@ var thychart = {
 
             var setTooltip = function(){
               $("body").find("."+$tooltip.attr("class")).remove();
-              $tooltip.html(title+": " + val);
+              $tooltip.html(title+" <span style='color:yellow;'><strong>" + val + "</strong>%</span>");
               $("body").append($tooltip);
             }();
 
