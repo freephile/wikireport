@@ -184,7 +184,8 @@ class CiviApi {
             return false;
             //die ("Need URL to create a contact");
         }
-        $result = $this->website_get($UrlWiki->wikiUrl);
+        $fuzzy = true; // do a wildcard search
+        $result = $this->website_get($UrlWiki->wikiUrl, $fuzzy);
         // print '<pre>'; print_r ($result); print'</pre>';
         if ( $result['count'] === 0 ) {
             $this->msg[] = "Adding new org from website URL {$UrlWiki->wikiUrl}";
@@ -208,11 +209,21 @@ class CiviApi {
             $result4 = $this->group_create( 
                 array(
                     'sequential' => 1,
-                    'group_id' => "Incoming_16",
+                    'group_id' => "Inbound_16",
                     'contact_id' => $contact_id,
                 ));
         } else {
-            // 'do nothing';
+            // we already have a record for this website;
+            // let's update the data for it
+            /*
+            $contact = $result['values'];
+            $out = '';
+            ob_start();
+            $this->custom_data_fetch($contact['contact_id']);
+            $out .= ob_get_clean();
+             * 
+             */
+            return true;
         }
         if ( $result3['count'] === 1 ) {
             return true;
