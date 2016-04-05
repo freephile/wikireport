@@ -51,7 +51,7 @@ include('navline.php');
                         If you're not in the upper left quadrant of this pie chart, then 
                         you're seriously behind the current security patches and feauture set
                         offered by MediaWiki.
-                        Find out the version of your wiki with a free <a href="/index.php">Wiki Report</a>.
+                        Find out the version of your wiki with a free <a href="index.php">Wiki Report</a>.
                         With a proper Development / Operations environment for your wiki, it becomes easy to maintain.
                     </p>
                     <p>
@@ -106,7 +106,7 @@ SQL;
         $percentage = 100 * $v / $total;
         $dataset .= "[\"v$k\", " . number_format($percentage, 1) ."], ";
     }
-    $dataset = substr($dataset, 0, -2); // remove the trailing comma
+    $dataset = substr($dataset, 0, -2); // remove the trailing comma and space
     $dataset = "[$dataset]";
 
     $resultCount = count($results);
@@ -130,6 +130,11 @@ SQL;
                         
             
                     </div>
+                    <p class="muted" style="margin-top:50px;">
+                        All beta releases and release candidates have been merged
+                        into their respective 'whole number' release versions for
+                        purposes of illustration
+                    </p>
                 </div>
             </div>
 

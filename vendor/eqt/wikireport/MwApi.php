@@ -85,10 +85,11 @@ class MwApi {
     var $variantarticlepath;
     var $wikiid;
     var $writeapi;
-
-    var $reference_version = '1.26wmf13';
-    var $reference_url = 'https://en.wikipedia.org/';
-    var $reference_date = "2015/07/15";
+    
+    public static $reference_version = NULL;  // current version on Wikipedia
+    public static $reference_url = NULL;   // en.wikipedia.org
+    public static $reference_date = NULL; // DATE_ATOM formatted string of now()
+    public static $reference_data = NULL;  // array general siprop
     
     /**
      * 
@@ -97,6 +98,11 @@ class MwApi {
     public function __construct($endpoint) {
         if (is_null($endpoint) || empty($endpoint) ) {
             die( __METHOD__ . " died because \$endpoint is null or empty");
+        }
+        if ( !isset(self::$reference_version) ||
+             !isset(self::$reference_url) ||
+             !isset(self::$reference_date) ) {
+            self::loadReferences();
         }
         $this->endpoint = $endpoint;
         $this->makeQuery();
@@ -108,6 +114,26 @@ class MwApi {
         }
         $this->versionString = trim(str_ireplace("MediaWiki", '', $this->generator));
     }
+    
+    
+    /**
+     * Static function that we can run to get basic info about the MediaWiki 
+     * currently running wikipedia.org
+     * 
+     */
+    public static function loadReferences() {
+        if ( !isset(self::$reference_version) ||
+             !isset(self::$reference_url) ||
+             !isset(self::$reference_date) ) {
+            self::$reference_url = 'https://en.wikipedia.org/';
+            self::$reference_date = date( DATE_ATOM );
+            $data = file_get_contents("https://en.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json&siprop=general");
+            $data = json_decode($data, true);
+            self::$reference_data = $data['query']['general'];
+            self::$reference_version = trim(str_ireplace("MediaWiki", '', self::$reference_data['generator']));
+        }
+    }
+    
     /**
      * We could redo this function so that it returns the query response
      * instead of populating a neverending series of parameters.

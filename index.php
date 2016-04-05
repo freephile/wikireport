@@ -26,6 +26,7 @@ require __DIR__ . '/secret.php';
 $err = array(); // our errors
 $result = '';
 $report = '';
+$email = '';
 $form = new \eqt\wikireport\Form();
 
 // url is pre-fillable via querystring
@@ -71,7 +72,7 @@ if ( isset($_POST) && ! empty($_POST) ) {
             // insert the record to Civi with group 'Incoming'
             if ( $UrlWiki->wikiUrl ) { // some wikis don't have readable API
                 $CiviApi = new \eqt\wikireport\CiviApi();
-                $CiviApi->org_create_from_url($UrlWiki);
+                $CiviApi->org_create_from_url($UrlWiki); // returns true or false
             }
             
             $apiQuery = '?action=query&meta=siteinfo&format=json&siprop=general';
@@ -95,13 +96,19 @@ if ( isset($_POST) && ! empty($_POST) ) {
                 $err['WikiPerm'] = "Unable to access basic info. (non-standard API endpoint; or permission problem)";
                 $err['WikiPerm'] .= "You can try to access $UrlWiki->apiUrl{$apiQuery}";
             }
+            // can't use static vars in HERE doc.
+            $ref_version = \eqt\wikireport\MwApi::$reference_version;
+            $ref_url = \eqt\wikireport\MwApi::$reference_url;
+            $ref_date = \eqt\wikireport\MwApi::$reference_date;
+                    
             $result .= <<<HERE
             <div class="alert alert-$fresh" role="alert">
                 <span class="glyphicon glyphicon-list-alt" aria-hidden="true"></span>
             You're running $version at <a href="$url" target="_blank">$url</a><br />
 
-            This is compared to {$MwApi->reference_version} which was found running at 
-            $MwApi->reference_url as of $MwApi->reference_date
+            This is compared to $ref_version which was found running at 
+            $ref_url as of $ref_date.  See the <a href="version.php">Version page</a>
+            to see where you stack up versus all the wikis we know about.
 
             What's been <a href="https://git.wikimedia.org/blob/mediawiki%2Fcore.git/HEAD/HISTORY" 
             target="_blank">added, fixed or changed</a>?
@@ -125,7 +132,7 @@ HERE;
 
             $sent = mail_report($result . $report, $MwApi, $email);
             // $sent = true;
-            if ($email) { // show only if $email is not empty 
+            if (!empty($email)) { // show only if $email is not empty 
                 if( $sent === true ) {
                     $result .= '<div class="alert alert-success" role="alert">'
                     . '<span class="glyphicon glyphicon-send" aria-hidden="true"></span>'
