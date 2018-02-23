@@ -92,10 +92,7 @@ if ( isset($_POST) && ! empty($_POST) ) {
             $version = $MwApi->generator;
 // echo $MwApi->base;
             $canonicalUrl = $MwApi->base;
-            if (empty($canonicalUrl)) {
-                $err['WikiPerm'] = "Unable to access basic info. (non-standard API endpoint; or permission problem)";
-                $err['WikiPerm'] .= "You can try to access $UrlWiki->apiUrl{$apiQuery}";
-            }
+
             // can't use static vars in HERE doc.
             $ref_version = \eqt\wikireport\MwApi::$reference_version;
             $ref_url = \eqt\wikireport\MwApi::$reference_url;
@@ -114,6 +111,31 @@ if ( isset($_POST) && ! empty($_POST) ) {
             target="_blank">added, fixed or changed</a>?
             </div>
 HERE;
+
+            if (empty($canonicalUrl)) {
+                $err['WikiPerm'] = "Unable to access basic info. (non-standard API endpoint; or permission problem)";
+                $err['WikiPerm'] .= " Maybe you're behind a firewall?";
+                $err['WikiPerm'] .= " You can try to access <a href='$UrlWiki->apiUrl{$apiQuery}'>your wiki API</a> directly.";
+                // $err['WikiPerm'] .= " Or try <a href='javascript:'>this link</a> which is pure JavaScript and can report on private wikis fully in YOUR browser's JavaScript console. (Note: hit Ctrl+Shift+i to open your console first)";
+                
+                $result = <<<HERE
+                    <div class="alert alert-warning" role="alert">
+                        <span class="glyphicon glyphicon-list-alt" aria-hidden="true"></span>
+                    You're probably behind a firewall and we can't see <a href="$url" target="_blank">your wiki</a>.<br />
+
+                    You can try to access <a href="$UrlWiki->apiUrl{$apiQuery}">your wiki API</a> directly.<br />
+                    
+                    $ref_url is running $ref_version as of $ref_date.  <br />
+                    
+                    See the <a href="version.php">Version page</a>
+                    to see where you stack up versus all the wikis we know about.
+
+                    What's been <a href="https://git.wikimedia.org/blob/mediawiki%2Fcore.git/HEAD/HISTORY" 
+                    target="_blank">added, fixed or changed</a>?
+                    </div>
+HERE;
+            }
+
 
             $options = array();
             if (isset($_POST['options'])) {
@@ -237,7 +259,7 @@ include('navline.php');
                             <div class="col-sm-10">
                                 <input type="email" class="form-control" id="email" name="email" placeholder="you@example.com" 
                                        value="<?php if($_POST) {echo htmlspecialchars($email);} ?>">
-                                <p class="help-block">Mail a copy of this report? (not required)</p>
+                                <p class="help-block">Where do we mail a copy of this report? (We'll add you to our very low volume mailing list for wiki-related news. We will NOT share or sell your email address.)</p>
 <?php if (isset($err['Email'])) {
     echo "<p class='text-danger'>{$err['Email']}</p>";
 } ?>
