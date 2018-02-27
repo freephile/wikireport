@@ -38,7 +38,7 @@ $loader = require __DIR__ . '/vendor/autoload.php';
         <title>Wiki Report => CiviCRM / MediaWiki API client</title>
         <link rel="shortcut icon" href="//freephile.org/wikireport/favicon.ico" type="image/png">
         
-        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+        <script src="./node_modules/jquery/dist/jquery.slim.js"></script>
         <link rel="stylesheet" href="jquery.dynatable.css">
     </head>
     <body>
@@ -554,6 +554,16 @@ $isNull = array(
 // All in one call, get the custom data for any new wiki records that don't have it
 // fetch_new_wikis(get_wiki_values(get_wikis(2000,0), $return, $isNull));
 
+/***
+TO BE CLEAR
+You can get stats/data for ONLY new/unpopulated wikis with the following sequence:
+// first find all the contacts that have wiki websites
+$wikis = get_wikis(2000, 0);
+// Then cull the list to be sure that you only have wikis without 'data'
+$data = get_wiki_values($wikis, $return, $isNull);
+// Then fetch the data via api calls on the wiki websites for those contacts.
+fetch_new_wikis($data);
+*/
 
 ?>
 <script src="jquery.dynatable.js"></script>

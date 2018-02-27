@@ -22,13 +22,13 @@
     }
   ],
   "dependencies": {
-    "jquery": "1.6"
+    "jquery": "~3.3"
   },
   "bugs": {
     "mail": "support@alfajango.com",
-    "web": "https://github.com/alfajango/jquery-dynatable/issues"
+    "url": "https://github.com/alfajango/jquery-dynatable/issues"
   },
-  "repositories"	: [
+  "repository"	: [
     {
       "type": "git",
       "url": "https://github.com/alfajango/jquery-dynatable.git"

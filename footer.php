@@ -48,8 +48,8 @@ echo $Profiler->__toString();
         </div>
     </div>
 </div>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
-<script src="vendor/jquery-number/jquery.number.js"></script>
+<script src="./node_modules/jquery/dist/jquery.slim.min.js"></script>
+<script src="./vendor/jquery-number/jquery.number.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
 <?php 
 if ($_SERVER['REQUEST_URI'] == '/wikireport/version.php') { 
