@@ -18,6 +18,7 @@
  *  along with this program in the LICENSE file
  *  If not, see <http://www.gnu.org/licenses/>.
  */
+// error_reporting(E_ALL); ini_set('display_errors', 1);
 // composer libraries
 require __DIR__ . '/vendor/autoload.php';
 // our generic functions
@@ -214,16 +215,7 @@ include('navline.php');
                         <div class="form-group">
                             <label for="url" class="col-sm-2 control-label">Wiki URL</label>
                             <div class="col-sm-10">
-                                <input type="url" class="form-control typeahead" id="url" name="url" placeholder="https://example.com" value="<?php echo $url; ?>"
-                                       onfocus="if (!this.value) {
-                                                   this.value = 'http://';
-                                               } else
-                                                   return false" 
-                                       onblur="if (this.value == 'http://') {
-                                                   this.value = '';
-                                               }
-                                               else
-                                                   return false" />
+                                <input type="url" class="form-control typeahead" id="url" name="url" placeholder="https://example.com" value="<?php echo $url; ?>" />
 <?php if (isset($err['Url'])) {
     echo "<p class='text-danger'>{$err['Url']}</p>";
 } ?>
