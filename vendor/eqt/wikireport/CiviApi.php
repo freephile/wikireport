@@ -205,12 +205,12 @@ class CiviApi {
                 'website_type_id' => 'wiki', // type 16
             );
             $result3 = $this->website_create($params3);
-            // add the contact to the 'Incoming' group
-            $result4 = $this->group_create( 
+            // tag the contact 'incoming'
+            $result4 = $this->make_call('EntityTag', 'create', 
                 array(
                     'sequential' => 1,
-                    'group_id' => "Inbound_16",
-                    'contact_id' => $contact_id,
+                    'tag_id' => "inbound",
+                    'entity_id' => $contact_id,
                 ));
         } else {
             // we already have a record for this website;
